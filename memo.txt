@@ -1,0 +1,10 @@
+
+
+
+ros2 service call /tello_action tello_msgs/srv/TelloAction "{cmd: 'takeoff'}"
+
+
+ros2 service call /tello_action tello_msgs/srv/TelloAction "{cmd: 'emergency'}"
+
+
+
