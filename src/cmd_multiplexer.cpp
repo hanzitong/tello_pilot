@@ -55,8 +55,8 @@ private:
       twist = last_aruco_twist_;
 
       // Example modification: boost forward speed and add yaw offset
-      twist.linear.x *= 1.2;
-      twist.angular.z += 0.5;
+      twist.linear.x = 0;
+      twist.angular.z -= 0.5;
 
       // TODO: use pid control here
 
@@ -68,14 +68,27 @@ private:
       // TODO: angle control (optional) 
 
     } else if (got_joy_) {
-      // No button: map joystick axes to twist
-      twist.linear.x  = (last_joy_.axes.size() > 1) ? last_joy_.axes[1] : 0.0;
-      twist.linear.y  = (last_joy_.axes.size() > 0) ? last_joy_.axes[0] : 0.0;
-      twist.angular.z = (last_joy_.axes.size() > 3) ? last_joy_.axes[3] : 0.0;
+      // low speed
+      // twist.linear.x  = 0.5 * last_joy_.axes[4];
+      // twist.linear.y  = 0.5 * last_joy_.axes[3];
+      // twist.linear.z  =  0.5 * last_joy_.axes[1];
+
+      // normal speed
+      twist.linear.x  =  last_joy_.axes[4];
+      twist.linear.y  =  last_joy_.axes[3];
+      twist.linear.z  =  last_joy_.axes[1];
+
+      // twist.angular.x  // ignored
+      // twist.angular.y  // ignored
+      if(last_joy_.buttons[5] > 0.5)twist.angular.z  = -0.5;
+      if(last_joy_.buttons[4] > 0.5)twist.angular.z  = 0.5;
+
     }
 
     twist_pub_->publish(twist);
   }
+
+  // if(last_joy_.buttons)
 
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr aruco_sub_;
