@@ -16,6 +16,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
+
 add_executable(ar_detector
   src/ar_detector.cpp
 )
@@ -34,11 +35,11 @@ install(TARGETS ar_detector
   DESTINATION lib/${PROJECT_NAME}
 )
 
-add_executable(ar_detector_tf
-  # src/ar_detector.cpp
-  src/ar_detector_tf.cpp
+
+add_executable(ar_detector_tf2
+  src/ar_detector_tf2.cpp
 )
-ament_target_dependencies(ar_detector_tf
+ament_target_dependencies(ar_detector_tf2
   rclcpp
   OpenCV
   cv_bridge
@@ -49,7 +50,7 @@ ament_target_dependencies(ar_detector_tf
   tf2_ros
   tf2_geometry_msgs
 )
-install(TARGETS ar_detector_tf
+install(TARGETS ar_detector_tf2
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -70,7 +71,25 @@ install(TARGETS cmd_multiplexer
 )
 
 
-# launch/camera_test.launch.xml
+add_executable(auto_centerizer
+  src/auto_centerizer.cpp
+)
+ament_target_dependencies(auto_centerizer
+  rclcpp
+  OpenCV
+  cv_bridge
+  image_transport
+  sensor_msgs
+  geometry_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
+install(TARGETS auto_centerizer
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+
 install(
   DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}/launch
