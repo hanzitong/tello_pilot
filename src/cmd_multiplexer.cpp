@@ -1,37 +1,47 @@
 // tello_pilot cmd_multiplexer.cpp
 
 #include <memory>
+#include <functional>
+#include <chrono>
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 
-class ArucoTwistNode : public rclcpp::Node
+// #include "../../tello_ros/tell_msgs/src/tello_action.hpp"
+// #include "TelloAction.srv"
+using namespace std::chrono_literals;
+
+
+class CmdMultiplexer : public rclcpp::Node
 {
 public:
-  ArucoTwistNode(): Node("aruco_twist_node")
+  CmdMultiplexer(): Node("cmd_multiplexer")
   {
     // Subscribe to joystick input
     joy_sub_ = this->create_subscription<sensor_msgs::msg::Joy>(
       "joy", 10,
-      std::bind(&ArucoTwistNode::joy_callback, this, std::placeholders::_1)
+      std::bind(&CmdMultiplexer::joy_callback, this, std::placeholders::_1)
     );
 
-    // Subscribe to incoming ArUco twist messages
-    aruco_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-      "/aruco_twist", 10,
-      std::bind(&ArucoTwistNode::aruco_callback, this, std::placeholders::_1)
+    // Subscribe /pid_vel
+    pid_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+      "pid_vel", 10,
+      std::bind(&CmdMultiplexer::pid_callback, this, std::placeholders::_1)
     );
 
     // Publisher for cmd_vel
-    twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
+    selected_twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
       "cmd_vel", 10
     );
-
-    // Timer: publish cmd_vel at 10Hz
     timer_ = this->create_wall_timer(
       std::chrono::milliseconds(100),
-      std::bind(&ArucoTwistNode::timer_callback, this)
+      std::bind(&CmdMultiplexer::timer_callback, this)
     );
+
+    // client_ = this->create_client<tello_msgs::srv::TelloAction>("/tello_action");
+    // while (!client_->wait_for_service(1s)) {
+    //   RCLCPP_INFO(this->get_logger(), "Waiting for /tello_action service ...");
+    // }
   }
 
 private:
@@ -39,73 +49,93 @@ private:
   {
     last_joy_ = *joy_msg;
     got_joy_ = true;
+    // last_joy_time_ = this->now();
   }
 
-  void aruco_callback(const geometry_msgs::msg::Twist::SharedPtr aruco_msg)
+  void pid_callback(const geometry_msgs::msg::Twist::SharedPtr pid_msg)
   {
-    last_aruco_twist_ = *aruco_msg;
-    got_aruco_ = true;
+    last_pid_ = *pid_msg;
+    // got_pid_ = true; // if pid_vel dead, Twist will be all 0 at pid_controller
   }
+
+  /* for calling takeoff service from joy */
+  // void send_takeoff()
+  // {
+  //   auto request = std::make_shared<TelloAction::Request>();
+  //   request->cmd = "takeoff";
+  //   RCLCPP_INFO(this->get_logger(), "Send takeoff command ...");
+
+  //   // async_send_request
+  //   client_->async_send_request(request);
+  // }
+
 
   void timer_callback()
   {
-    geometry_msgs::msg::Twist twist;
+    geometry_msgs::msg::Twist selected_twist;
+    // rclcpp::Time now = this->now();
+    // bool joy_alive = (now - last_joy_time_) < joy_timeout_;
+    // bool joy_alive = (last_joy_time_ - now) < joy_timeout_;
+    // RCLCPP_INFO(this->get_logger(), "now time: %f", now.seconds());
 
-    if (got_joy_ && last_joy_.buttons.size() > 5 && last_joy_.buttons[5] == 1 && got_aruco_) {
-      twist = last_aruco_twist_;
+    selected_twist.linear.x = 1.; // for test
+    selected_twist.linear.y = 0.;
+    selected_twist.linear.z = 0.;
+    selected_twist.angular.x = 0.;
+    selected_twist.angular.y = 0.;
+    selected_twist.angular.z = 0.;
 
-      // Example modification: boost forward speed and add yaw offset
-      twist.linear.x = 0;
-      twist.angular.z -= 0.5;
-
-      // TODO: use pid control here
-
-      // TODO: position control
-      // 0, get position vector between ar_marker and the center of image 
-      // 1, apply rotation matrix to position vector with tf2
-      // 2, make cmd_vel using pid contro.
-
-      // TODO: angle control (optional) 
-
-    } else if (got_joy_) {
-      // low speed
-      // twist.linear.x  = 0.5 * last_joy_.axes[4];
-      // twist.linear.y  = 0.5 * last_joy_.axes[3];
-      // twist.linear.z  =  0.5 * last_joy_.axes[1];
-
-      // normal speed
-      twist.linear.x  =  last_joy_.axes[4];
-      twist.linear.y  =  last_joy_.axes[3];
-      twist.linear.z  =  last_joy_.axes[1];
-
-      // twist.angular.x  // ignored
-      // twist.angular.y  // ignored
-      if(last_joy_.buttons[5] > 0.5)twist.angular.z  = -0.5;
-      if(last_joy_.buttons[4] > 0.5)twist.angular.z  = 0.5;
+    // if (joy_alive) {
+    if (got_joy_) {
+      if (last_joy_.buttons[5] == 1) { // auto mode
+        // if exceed [-1, 1], it will be rounded at tello_driver
+        selected_twist.linear.x = last_pid_.linear.x;
+        selected_twist.linear.y = last_pid_.linear.y;
+        // selected_twist.angular.x = last_pid_.angular.x;  // ignored at tello_driver
+        // selected_twist.angular.y = last_pid_.angular.y;  // ignored at tello_driver
+        selected_twist.angular.z = last_pid_.angular.z;
+      } else {                        // manual mode
+        selected_twist.linear.x  =  last_joy_.axes[4];
+        selected_twist.linear.y  =  last_joy_.axes[3];
+        // selected_twist.angular.x  // ignored at tello_driver
+        // selected_twist.angular.y  // ignored at tello_driver
+        selected_twist.angular.z = last_joy_.axes[0];
+      }
+      selected_twist.linear.z  =  last_joy_.axes[1];
 
     }
 
-    twist_pub_->publish(twist);
-  }
+    selected_twist_pub_->publish(selected_twist);
 
-  // if(last_joy_.buttons)
+    // if(got_joy_ && last_joy_.buttons[4] == 1){
+    //   send_takeoff();
+    // }
+
+
+  } // timer_callback()
+
 
   rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr aruco_sub_;
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_pub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr pid_sub_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr selected_twist_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  // rclcpp::Client<TelloAction>::SharedPtr client_;
 
   sensor_msgs::msg::Joy last_joy_;
-  geometry_msgs::msg::Twist last_aruco_twist_;
+  geometry_msgs::msg::Twist last_pid_;
   bool got_joy_{false};
-  bool got_aruco_{false};
+  // bool joy_alive_{false};
+  // rclcpp::Time last_joy_time_{0};
+  // rclcpp::Duration joy_timeout_{0, 500000000};
+  // bool got_pid_{false};
+
 };
 
 
 int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<ArucoTwistNode>());
+  rclcpp::spin(std::make_shared<CmdMultiplexer>());
   rclcpp::shutdown();
   return 0;
 }

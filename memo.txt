@@ -1,10 +1,13 @@
 
-
-
+// launch in sse
 ros2 service call /tello_action tello_msgs/srv/TelloAction "{cmd: 'takeoff'}"
-
-
 ros2 service call /tello_action tello_msgs/srv/TelloAction "{cmd: 'emergency'}"
+
+// tello_driver services
+ros2 service call /tello_action tello_msgs/TelloAction "{cmd: 'takeoff'}"
+ros2 service call /tello_action tello_msgs/TelloAction "{cmd: 'rc 0 0 0 20'}"
+ros2 service call /tello_action tello_msgs/TelloAction "{cmd: 'land'}"
+ros2 service call /tello_action tello_msgs/TelloAction "{cmd: 'battery?'}"
 
 
 

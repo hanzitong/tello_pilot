@@ -11,14 +11,20 @@ find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(tello_msgs)
+
+
+include_directories(include)
+include_directories(srv)
 
 
 add_executable(ar_detector
-  src/ar_detector.cpp
+  src/ar_detector_tf2.cpp
 )
 ament_target_dependencies(ar_detector
   rclcpp
@@ -26,31 +32,13 @@ ament_target_dependencies(ar_detector
   cv_bridge
   sensor_msgs
   geometry_msgs
+  visualization_msgs
   image_transport
   tf2
   tf2_ros
   tf2_geometry_msgs
 )
 install(TARGETS ar_detector
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-
-add_executable(ar_detector_tf2
-  src/ar_detector_tf2.cpp
-)
-ament_target_dependencies(ar_detector_tf2
-  rclcpp
-  OpenCV
-  cv_bridge
-  sensor_msgs
-  geometry_msgs
-  image_transport
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
-)
-install(TARGETS ar_detector_tf2
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -65,29 +53,27 @@ ament_target_dependencies(cmd_multiplexer
   tf2
   tf2_ros
   tf2_geometry_msgs
+  tello_msgs
 )
 install(TARGETS cmd_multiplexer
   DESTINATION lib/${PROJECT_NAME}
 )
 
 
-add_executable(auto_centerizer
-  src/auto_centerizer.cpp
+add_executable(pid_controller
+  src/pid_controller.cpp
 )
-ament_target_dependencies(auto_centerizer
+ament_target_dependencies(pid_controller
   rclcpp
-  OpenCV
-  cv_bridge
-  image_transport
-  sensor_msgs
   geometry_msgs
   tf2
   tf2_ros
   tf2_geometry_msgs
 )
-install(TARGETS auto_centerizer
+install(TARGETS pid_controller
   DESTINATION lib/${PROJECT_NAME}
 )
+
 
 
 install(

@@ -26,8 +26,7 @@ def generate_launch_description():
             name='opencv_cam',
             output='screen',
             parameters=[
-                {'index': 0},           # /dev/video0
-                # {'index': 4},           # /dev/video4
+                {'index': 4},           # /dev/video4
                 {'image_width': 640},
                 {'image_height': 480},
                 {'framerate': 25},
@@ -35,6 +34,21 @@ def generate_launch_description():
             ],
             remappings=[('/image_raw', '/cam_image_raw')],
         ),
+        Node(       # PC camera center frame [pixel] (1920x1080)
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            arguments=[
+                '--x', '3.2',   # [100 * pixel]
+                '--y', '2.4',   # [100 * pixel]
+                '--z', '0',
+                '--yaw', '0',
+                '--pitch', '0',
+                '--roll', '0',
+                '--frame-id', 'camera_cv_frame',
+                '--child-frame-id', 'camera_center_frame'
+            ]
+        ),
+
         Node(
             package='joy',
             executable='joy_node',
@@ -50,18 +64,17 @@ def generate_launch_description():
             executable='ar_detector',
             output='screen',
         ),
-        # Node(
-        #     package='tello_pilot',
-        #     executable='ar_detector_tf',
-        #     output='screen',
-        # ),
-
+        Node(
+            package='tello_pilot',
+            executable='pid_controller',
+            output='screen',
+        ),
         Node(
             package='tello_pilot',
             executable='cmd_multiplexer',
             output='screen',
         ),
-
+        
 
         # Node(
         #     package='rviz2',
