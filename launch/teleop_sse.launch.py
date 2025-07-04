@@ -18,6 +18,14 @@ rviz_config = os.path.join(
 #     OnSignal(signal=signal.SIGINT, on_signal=lambda *args, **kwargs: Shutdown())
 # )
 
+
+
+pc_cam_pixels = [1920, 1080]
+usb_cam_pixels = [640, 480]
+realsense_cam_pixels = [0, 0]
+
+
+
 def generate_launch_description():
     return LaunchDescription([
         Node(
@@ -27,8 +35,10 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 {'index': 4},           # /dev/video4
-                {'image_width': 640},
-                {'image_height': 480},
+                # {'image_width': 640},
+                # {'image_height': 480},
+                {'image_width': pc_cam_pixels[0]},
+                {'image_height': pc_cam_pixels[1]},
                 {'framerate': 25},
                 {'camera_frame_id': 'camera_frame'},
             ],
@@ -38,8 +48,10 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             arguments=[
-                '--x', '3.2',   # [100 * pixel]
-                '--y', '2.4',   # [100 * pixel]
+                # '--x', '3.2',   # [100 * pixel]
+                # '--y', '2.4',   # [100 * pixel]
+                '--x', str(usb_cam_pixels[0]/2/100),   # [100 * pixel]
+                '--y', str(usb_cam_pixels[1]/2/100),   # [100 * pixel]
                 '--z', '0',
                 '--yaw', '0',
                 '--pitch', '0',

@@ -44,12 +44,9 @@ class ControlInputPublisher : public rclcpp::Node
     // void timer_callback(geometry_msgs::msg::Vector3Stamped marker23_translation_camframe)
     void timer_callback()
     {
-        // get transform
-        // geometry_msgs::msg::TransformStamped t_cam;
-        geometry_msgs::msg::TransformStamped t_tello;
-        // t_cam = tf_buffer_ -> lookupTransform("camera_cv_frame","marker_23_frame", tf2::TimePointZero); 
+        geometry_msgs::msg::TransformStamped t_tello; // contain transform
+        geometry_msgs::msg::Twist pid_vel_msg;        // contain cmd_vel generated with pid to be published
 
-        geometry_msgs::msg::Twist pid_vel_msg;
         pid_vel_msg.linear.x = 0.;
         pid_vel_msg.linear.y = 0.;
         pid_vel_msg.linear.z = 0.;
@@ -61,11 +58,11 @@ class ControlInputPublisher : public rclcpp::Node
           // to, from (matrix:from camera, watch marker)
           t_tello = tf_buffer_->lookupTransform("marker_23_frame", "camera_center_frame", tf2::TimePointZero);
 
-          // check time of tf
+          // TODO: check time of tf
 
 
           pid_vel_msg.linear.x = pid_x_.compute(t_tello.transform.translation.x, 0., 0.1);
-          pid_vel_msg.linear.y = pid_y_.compute(-1 * t_tello.transform.translation.y, 0., 0.1);
+          pid_vel_msg.linear.y = pid_y_.compute(-1 * t_tello.transform.translation.y, 0., 0.1); // -1 is for adjust axis
           pid_vel_msg.linear.z = 0.;
           pid_vel_msg.angular.x = 0.;
           pid_vel_msg.angular.y = 0.;
@@ -86,17 +83,6 @@ class ControlInputPublisher : public rclcpp::Node
         // pid_vel_msg.linear.z = 0.;
         publisher_->publish(pid_vel_msg);
 
-
-        /* what is it ????????????????  forgot
-        geometry_msgs::msg::Vector3Stamped marker23_translation_camframe;
-        marker23_translation_camframe.header.stamp = t_cam.header.stamp;
-        marker23_translation_camframe.header.frame_id = "camera_cv_frame";
-        marker23_translation_camframe.vector.x = t_cam.transform.translation.x;
-        marker23_translation_camframe.vector.y = t_cam.transform.translation.y;
-        geometry_msgs::msg::Vector3Stamped center_translation_marker23frame;
-        // tf_buffer_->transform(marker23_translation_camframe, center_translation_marker23frame, "camera_center_frame"); // argument order: v_in, v_out, "frame_destination"
-        tf_buffer_->transform(marker23_translation_camframe, center_translation_marker23frame, "camera_cv_frame");
-        */
 
     }
 

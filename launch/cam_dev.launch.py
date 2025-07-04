@@ -11,6 +11,11 @@ pkg_share = get_package_share_directory('tello_pilot')
 # )
 
 
+pc_cam_pixels = [1920, 1080]
+usb_cam_pixels = [640, 480]
+realsense_cam_pixels = [0, 0]
+
+
 def generate_launch_description():
     node_list = [
         Node(
@@ -20,8 +25,10 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 {'index': 0},
-                {'image_width': 1920},
-                {'image_height': 1080},
+                # {'image_width': 1920},
+                # {'image_height': 1080},
+                {'image_width': pc_cam_pixels[0]},
+                {'image_height': pc_cam_pixels[1]},
                 {'framerate': 30},
                 {'camera_frame_id': 'camera_cv_frame'},
             ],
@@ -57,8 +64,10 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             arguments=[
-                '--x', '9.6',   # [100 * pixel]
-                '--y', '5.4',   # [100 * pixel]
+                # '--x', '9.6',   # [100 * pixel]
+                # '--y', '5.4',   # [100 * pixel]
+                '--x', str(pc_cam_pixels[0]/2/100),   # [100 * pixel]
+                '--y', str(pc_cam_pixels[1]/2/100),   # [100 * pixel]
                 '--z', '0',
                 '--yaw', '0',
                 '--pitch', '0',
