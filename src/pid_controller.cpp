@@ -19,32 +19,37 @@
 
 using namespace std::chrono_literals;
 
-class ControlInputPublisher : public rclcpp::Node
+class PidVelPublisher : public rclcpp::Node
 {
   public:
-    ControlInputPublisher()
+    PidVelPublisher()
+    // PidVelPublisher(int pixel_width, int pixel_height)
     : Node("pid_controller"),
-    pid_x_{1.0, 0., 0.1},
-    pid_y_{1.3, 0., 0.1}
+    // pixel_width_(pixel_width),
+    // pixel_height_(pixel_height),
+    // pid_x_{0.5, 0.001, 0.},  // 0.3
+    // pid_y_{0.5, 0.001, 0.}   // 0.2
+    pid_x_{0.55, 0., 0.},  // 0.3
+    pid_y_{0.55, 0., 0.}   // 0.2
     {
       publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("pid_vel", 10);
-      // subscriber_ = this->create_subscription<>();
       timer_ = this->create_wall_timer(
-        100ms, std::bind(&ControlInputPublisher::timer_callback, this)
+        100ms, std::bind(&PidVelPublisher::timer_callback, this)
+        // 100ms,
+        // [this, pixel_width, pixel_height](){this->timer_callback(pixel_width_, pixel_height_);}
       );
-
       tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
       tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
 
-      debug_t_tello_pub = this->create_publisher<geometry_msgs::msg::TransformStamped>("t_tello", 10);
+      // debug_t_tello_pub = this->create_publisher<geometry_msgs::msg::TransformStamped>("t_tello", 10);
     }
 
   private:
-    // void timer_callback(geometry_msgs::msg::Vector3Stamped marker23_translation_camframe)
     void timer_callback()
+    // void timer_callback(int pixel_width, int pixel_height)
     {
-        geometry_msgs::msg::TransformStamped t_tello; // contain transform
+        geometry_msgs::msg::TransformStamped t_tello; // contain listened transform
         geometry_msgs::msg::Twist pid_vel_msg;        // contain cmd_vel generated with pid to be published
 
         pid_vel_msg.linear.x = 0.;
@@ -60,16 +65,25 @@ class ControlInputPublisher : public rclcpp::Node
 
           // TODO: check time of tf
 
+          // normarize x and y (not z yet)
+          // double pidxy_norm = std::sqrt(std::pow(pixel_width_, 2) + std::pow(pixel_height_, 2)) / 100; // [100 * pixel]
+          // double pidxy_norm = 10; // heuristic
+          // double pidxy_norm = 7; // heuristic
+          double pidxy_norm = 4; // heuristic
 
-          pid_vel_msg.linear.x = pid_x_.compute(t_tello.transform.translation.x, 0., 0.1);
-          pid_vel_msg.linear.y = pid_y_.compute(-1 * t_tello.transform.translation.y, 0., 0.1); // -1 is for adjust axis
+          // generate /pid_vel
+          pid_vel_msg.linear.x = pid_x_.compute(t_tello.transform.translation.x, 0., 0.1) / pidxy_norm;  // 100ms
+          pid_vel_msg.linear.y = pid_y_.compute(t_tello.transform.translation.y, 0., 0.1) / pidxy_norm;
+          // pid_vel_msg.linear.x = pid_x_.compute(-1 * t_tello.transform.translation.x, 0., 0.1) / pidxy_norm;  // 100ms
+          // pid_vel_msg.linear.y = pid_y_.compute(-1 * t_tello.transform.translation.y, 0., 0.1) / pidxy_norm;
+            // -1 is for adjusting axis
           pid_vel_msg.linear.z = 0.;
           pid_vel_msg.angular.x = 0.;
           pid_vel_msg.angular.y = 0.;
           pid_vel_msg.angular.z = 0.;
           // pid_vel_msg.angular.z = pid_z_.compute();
 
-          debug_t_tello_pub->publish(t_tello);
+          // debug_t_tello_pub->publish(t_tello);
 
         }catch(const tf2::TransformException & ex){
           RCLCPP_WARN(this->get_logger(),
@@ -81,6 +95,12 @@ class ControlInputPublisher : public rclcpp::Node
         // pid_vel_msg.linear.x = pid_.compute(t_tello.transform.translation.x, 0., 0.1);
         // pid_vel_msg.linear.y = pid_.compute(-1 * t_tello.transform.translation.y, 0., 0.1);
         // pid_vel_msg.linear.z = 0.;
+        if (pid_vel_msg.linear.x > 0.8) pid_vel_msg.linear.x = 0.5;
+        if (pid_vel_msg.linear.x < -0.8) pid_vel_msg.linear.x = -0.5;
+        if (pid_vel_msg.linear.y > 0.8) pid_vel_msg.linear.y = 0.5;
+        if (pid_vel_msg.linear.y < -0.8) pid_vel_msg.linear.y = -0.5;
+
+
         publisher_->publish(pid_vel_msg);
 
 
@@ -88,26 +108,32 @@ class ControlInputPublisher : public rclcpp::Node
 
 
     rclcpp::TimerBase::SharedPtr timer_;
-    // rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_{nullptr};
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_;
-    // std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
-    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr publisher_{nullptr};
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-
 
     PIDController pid_x_;
     PIDController pid_y_;
+    int pixel_width_;
+    int pixel_height_;
 
 
-    rclcpp::Publisher<geometry_msgs::msg::TransformStamped>::SharedPtr debug_t_tello_pub;
-
+    // rclcpp::Publisher<geometry_msgs::msg::TransformStamped>::SharedPtr debug_t_tello_pub;
 };
 
 
 int main(int argc, char * argv[])
 {
+  // if (argc < 3) {
+  //   std::cout << "give arugment !!! (pixel_width, pixel_height)" << std::endl;
+  //   return 1;
+  // }
+  // int pixel_width = std::stoi(argv[1]);
+  // int pixel_height = std::stoi(argv[2]);
+
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<ControlInputPublisher>());
+  rclcpp::spin(std::make_shared<PidVelPublisher>());
+  // rclcpp::spin(std::make_shared<PidVelPublisher>(pixel_width, pixel_height));
   rclcpp::shutdown();
   return 0;
 }

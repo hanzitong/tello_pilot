@@ -24,7 +24,7 @@ def generate_launch_description():
             name='opencv_cam',
             output='screen',
             parameters=[
-                {'index': 0},
+                {'index': 1},
                 # {'image_width': 1920},
                 # {'image_height': 1080},
                 {'image_width': pc_cam_pixels[0]},
@@ -48,18 +48,6 @@ def generate_launch_description():
         #     ],
         #     remappings=[('/image_raw', '/cam_image_raw')],
         # ),
-
-        Node(
-            package='tello_pilot',
-            executable='ar_detector',
-            output='screen',
-        ),
-        Node(
-            package='tello_pilot',
-            executable='pid_controller',
-            output='screen',
-        ),
-
         Node(       # PC camera center frame [pixel] (1920x1080)
             package='tf2_ros',
             executable='static_transform_publisher',
@@ -76,14 +64,21 @@ def generate_launch_description():
                 '--child-frame-id', 'camera_center_frame'
             ]
         ),
-        Node(
-            package='tello_pilot',
-            executable='pid_controller',
-            output='screen',
-        ),
+        
         Node(
             package='joy',
             executable='joy_node',
+            output='screen',
+        ),
+        # Node(
+        #     package='tello_driver',
+        #     executable='tello_driver_main',
+        #     output='screen',
+        # ),
+
+        Node(
+            package='tello_pilot',
+            executable='ar_detector',
             output='screen',
         ),
         Node(
@@ -91,13 +86,15 @@ def generate_launch_description():
             executable='cmd_multiplexer',
             output='screen',
         ),
+        Node(
+            package='tello_pilot',
+            executable='pid_controller',
+            output='screen',
+            # arguments=['1920', '1080'],
+            arguments=[ str(pc_cam_pixels[0]), str(pc_cam_pixels[1]) ],
+        ),
 
-        # Node(
-        #     package='tello_driver',
-        #     executable='tello_driver_main',
-        #     output='screen',
-        # ),
-
+        
     ]
 
 

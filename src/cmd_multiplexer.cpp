@@ -78,7 +78,7 @@ private:
     // bool joy_alive = (last_joy_time_ - now) < joy_timeout_;
     // RCLCPP_INFO(this->get_logger(), "now time: %f", now.seconds());
 
-    selected_twist.linear.x = 1.; // for test
+    selected_twist.linear.x = 0.;
     selected_twist.linear.y = 0.;
     selected_twist.linear.z = 0.;
     selected_twist.angular.x = 0.;
@@ -88,12 +88,16 @@ private:
     // if (joy_alive) {
     if (got_joy_) {
       if (last_joy_.buttons[5] == 1) { // auto mode
-        // if exceed [-1, 1], it will be rounded at tello_driver
+        // if exceed [-1, 1], it seems to be ignored ...
         selected_twist.linear.x = last_pid_.linear.x;
         selected_twist.linear.y = last_pid_.linear.y;
         // selected_twist.angular.x = last_pid_.angular.x;  // ignored at tello_driver
         // selected_twist.angular.y = last_pid_.angular.y;  // ignored at tello_driver
         selected_twist.angular.z = last_pid_.angular.z;
+      } else if (last_joy_.buttons[4] == 1) {
+        selected_twist.linear.x = 0.5;
+        selected_twist.linear.y = 0.;
+        selected_twist.angular.z = 0.;
       } else {                        // manual mode
         selected_twist.linear.x  =  last_joy_.axes[4];
         selected_twist.linear.y  =  last_joy_.axes[3];

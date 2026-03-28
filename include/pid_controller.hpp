@@ -6,7 +6,8 @@ class PIDController
 public:
     PIDController(
         double kp, double ki, double kd, 
-        double i_max = 1e6, double i_min = -1e6
+        // double i_max = 1e6, double i_min = -1e6
+        double i_max = 0.2, double i_min = -0.2
     )
     : kp_(kp), ki_(ki), kd_(kd), 
     integral_(0.0), prev_error_(0.0), i_max_(i_max), i_min_(i_min)
