@@ -7,6 +7,15 @@ from launch_ros.actions import Node
 import os
 from ament_index_python.packages import get_package_share_directory
 pkg_share = get_package_share_directory('tello_pilot')
+
+# udev シンボリックリンク /dev/tello_cam が指す実デバイス番号を取得する
+# 例: /dev/tello_cam -> /dev/video5 → index = 5
+_video_tello = '/dev/video_tello'
+if os.path.exists(_video_tello):
+    _actual_device = os.path.realpath(_video_tello)   # /dev/videoN
+    cam_index = int(_actual_device.replace('/dev/video', ''))
+else:
+    cam_index = 4  # フォールバック: udev 未設定時
 rviz_config = os.path.join(
     pkg_share,
     'config',
@@ -24,6 +33,8 @@ pc_cam_pixels = [1920, 1080]
 usb_cam_pixels = [640, 480]
 realsense_cam_pixels = [0, 0]
 
+# 使用する解像度。GStreamer が MJPG に対応していない環境では usb_cam_pixels (640x480) を使う
+cam_pixels = usb_cam_pixels
 
 
 def generate_launch_description():
@@ -34,24 +45,20 @@ def generate_launch_description():
             name='opencv_cam',
             output='screen',
             parameters=[
-                {'index': 4},           # /dev/video4
-                # {'image_width': 640},
-                # {'image_height': 480},
-                {'image_width': pc_cam_pixels[0]},
-                {'image_height': pc_cam_pixels[1]},
-                {'framerate': 25},
+                {'index': cam_index},    # /dev/tello_cam が指すデバイス番号
+                {'width': cam_pixels[0]},
+                {'height': cam_pixels[1]},
+                {'fps': 25},            # YUYV 640x480 max fps
                 {'camera_frame_id': 'camera_frame'},
             ],
             remappings=[('/image_raw', '/cam_image_raw')],
         ),
-        Node(       # PC camera center frame [pixel] (1920x1080)
+        Node(       # camera center frame: cam_pixels に合わせて自動計算
             package='tf2_ros',
             executable='static_transform_publisher',
             arguments=[
-                # '--x', '3.2',   # [100 * pixel]
-                # '--y', '2.4',   # [100 * pixel]
-                '--x', str(usb_cam_pixels[0]/2/100),   # [100 * pixel]
-                '--y', str(usb_cam_pixels[1]/2/100),   # [100 * pixel]
+                '--x', str(cam_pixels[0]/2/100),   # [100 * pixel]
+                '--y', str(cam_pixels[1]/2/100),   # [100 * pixel]
                 '--z', '0',
                 '--yaw', '0',
                 '--pitch', '0',
@@ -86,7 +93,12 @@ def generate_launch_description():
             executable='cmd_multiplexer',
             output='screen',
         ),
-        
+        Node(
+            package='tello_pilot',
+            executable='auto_lander',
+            output='screen',
+        ),
+
 
         # Node(
         #     package='rviz2',

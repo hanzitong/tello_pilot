@@ -4,6 +4,13 @@ from launch_ros.actions import Node
 import os
 from ament_index_python.packages import get_package_share_directory
 pkg_share = get_package_share_directory('tello_pilot')
+
+_video_tello = '/dev/video_tello'
+if os.path.exists(_video_tello):
+    _actual_device = os.path.realpath(_video_tello)
+    cam_index = int(_actual_device.replace('/dev/video', ''))
+else:
+    cam_index = 4  # フォールバック: udev 未設定時
 # rviz_cinfig = os.path.join(
 #     pkg_share,
 #     'config',
@@ -24,12 +31,10 @@ def generate_launch_description():
             name='opencv_cam',
             output='screen',
             parameters=[
-                {'index': 1},
-                # {'image_width': 1920},
-                # {'image_height': 1080},
-                {'image_width': pc_cam_pixels[0]},
-                {'image_height': pc_cam_pixels[1]},
-                {'framerate': 30},
+                {'index': cam_index},    # /dev/tello_cam が指すデバイス番号
+                {'width': pc_cam_pixels[0]},
+                {'height': pc_cam_pixels[1]},
+                {'fps': 30},
                 {'camera_frame_id': 'camera_cv_frame'},
             ],
             remappings=[('/image_raw', '/cam_image_raw')],
@@ -90,11 +95,14 @@ def generate_launch_description():
             package='tello_pilot',
             executable='pid_controller',
             output='screen',
-            # arguments=['1920', '1080'],
-            arguments=[ str(pc_cam_pixels[0]), str(pc_cam_pixels[1]) ],
+        ),
+        Node(
+            package='tello_pilot',
+            executable='auto_lander',
+            output='screen',
         ),
 
-        
+
     ]
 
 
