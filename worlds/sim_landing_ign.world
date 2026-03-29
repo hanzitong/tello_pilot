@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<!--
+  sim_landing_ign.world
+  Ignition Gazebo 6 (Fortress) 用シミュレーションワールド。
+
+  構成:
+    - 地面に marker_23 を固定配置（原点）
+    - drone1: 静的なドローンモデル（z=1.0m）、カメラ下向き
+  カメラ画像は /drone1/camera/image トピックに配信される。
+  ros_gz_bridge で ROS2 /cam_image_raw にブリッジする。
+-->
+<sdf version="1.8">
+  <world name="default">
+
+    <!-- 物理演算 -->
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <!-- GUI/サービス操作 -->
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <!-- シーン配信（GUI 表示用） -->
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <!-- カメラ・センサー描画（Ogre2） -->
+    <plugin filename="ignition-gazebo-sensors-system"
+            name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <!-- 照明 -->
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>1 1 1 1</diffuse>
+      <specular>0.5 0.5 0.5 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- 地面 -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ArUco marker_23: 着陸目標（地面中央固定） -->
+    <!-- IGN_GAZEBO_RESOURCE_PATH に tello_pilot/models が含まれている必要あり -->
+    <include>
+      <uri>model://marker_23</uri>
+      <pose>0 0 0.001 0 0 0</pose>
+    </include>
+
+    <!--
+      drone1: ドローンモデル（静的、z=1.0m）
+      カメラは base_link の下面に配置し、地面（-z方向）を向く。
+      pitch = π/2 (1.5708 rad) で +X が -Z 方向を向きカメラが下向きになる。
+    -->
+    <model name="drone1">
+      <static>true</static>
+      <pose>0 0 1.0 0 0 0</pose>
+
+      <link name="base_link_1">
+        <!-- ドローン本体の外観 -->
+        <visual name="body">
+          <geometry><box><size>0.18 0.18 0.05</size></box></geometry>
+          <material>
+            <ambient>0.3 0.3 0.3 1</ambient>
+            <diffuse>0.5 0.5 0.5 1</diffuse>
+          </material>
+        </visual>
+
+        <!--
+          カメラセンサー（下向き）
+          pose の roll/pitch/yaw は sensor フレームの回転。
+          Ignition では camera の「見る方向」= +Z 軸方向（OpenCV 慣習）。
+          +Z を -world_Z に向けるため pitch = π (3.14159) を使う。
+          → センサー Z軸 = 地面方向
+        -->
+        <sensor name="camera" type="camera">
+          <pose>0 0 -0.03 0 3.14159 0</pose>
+          <topic>/drone1/camera/image</topic>
+          <camera>
+            <horizontal_fov>0.96</horizontal_fov>
+            <image>
+              <width>960</width>
+              <height>720</height>
+              <format>R8G8B8</format>
+            </image>
+            <clip>
+              <near>0.05</near>
+              <far>100</far>
+            </clip>
+          </camera>
+          <always_on>true</always_on>
+          <update_rate>30</update_rate>
+          <visualize>true</visualize>
+        </sensor>
+
+      </link>
+    </model>
+
+  </world>
+</sdf>

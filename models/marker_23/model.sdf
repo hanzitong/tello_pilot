@@ -1,0 +1,33 @@
+<?xml version='1.0'?>
+<!--
+  ArUco DICT_4X4_50 marker ID 23
+  Ignition Gazebo (Fortress/Ogre2) 対応版。
+  テクスチャ: materials/textures/aruco_mark_23.png
+-->
+<sdf version='1.8'>
+  <model name='marker_23'>
+    <static>true</static>
+
+    <link name='marker'>
+      <pose>0 0 0 0 0 0</pose>
+      <visual name='visual'>
+        <geometry>
+          <box><size>0.3 0.3 0.001</size></box>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+          <emissive>0.8 0.8 0.8 0</emissive>
+          <pbr>
+            <metal>
+              <!-- パスは model ディレクトリからの相対パス -->
+              <albedo_map>materials/textures/aruco_mark_23.png</albedo_map>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+
+  </model>
+</sdf>
