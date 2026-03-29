@@ -25,12 +25,11 @@ class PidVelPublisher : public rclcpp::Node
     PidVelPublisher()
     // PidVelPublisher(int pixel_width, int pixel_height)
     : Node("pid_controller"),
-    // pixel_width_(pixel_width),
-    // pixel_height_(pixel_height),
     // pid_x_{0.5, 0.001, 0.},  // 0.3
     // pid_y_{0.5, 0.001, 0.}   // 0.2
     pid_x_{0.55, 0., 0.},  // 0.3
-    pid_y_{0.55, 0., 0.}   // 0.2
+    pid_y_{0.55, 0., 0.},  // 0.2
+    last_time_(this->now())
     {
       publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("pid_vel", 10);
       timer_ = this->create_wall_timer(
@@ -47,8 +46,11 @@ class PidVelPublisher : public rclcpp::Node
 
   private:
     void timer_callback()
-    // void timer_callback(int pixel_width, int pixel_height)
     {
+        const rclcpp::Time now = this->now();
+        const double dt = (now - last_time_).seconds();
+        last_time_ = now;
+
         geometry_msgs::msg::TransformStamped t_tello; // contain listened transform
         geometry_msgs::msg::Twist pid_vel_msg;        // contain cmd_vel generated with pid to be published
 
@@ -60,8 +62,10 @@ class PidVelPublisher : public rclcpp::Node
         pid_vel_msg.angular.z = 0.;
 
         try{
-          // to, from (matrix:from camera, watch marker)
-          t_tello = tf_buffer_->lookupTransform("marker_23_frame", "camera_center_frame", tf2::TimePointZero);
+          // camera_center_frame から見た marker_23_frame の位置を取得する
+          // = (marker_pixel - center_pixel) / 100
+          // マーカーが右/下にあるとき translation.x/y が正になる（直感的な符号）
+          t_tello = tf_buffer_->lookupTransform("camera_center_frame", "marker_23_frame", tf2::TimePointZero);
 
           // TODO: check time of tf
 
@@ -72,8 +76,8 @@ class PidVelPublisher : public rclcpp::Node
           double pidxy_norm = 4; // heuristic
 
           // generate /pid_vel
-          pid_vel_msg.linear.x = pid_x_.compute(t_tello.transform.translation.x, 0., 0.1) / pidxy_norm;  // 100ms
-          pid_vel_msg.linear.y = pid_y_.compute(t_tello.transform.translation.y, 0., 0.1) / pidxy_norm;
+          pid_vel_msg.linear.x = pid_x_.compute(t_tello.transform.translation.x, 0., dt) / pidxy_norm;
+          pid_vel_msg.linear.y = pid_y_.compute(t_tello.transform.translation.y, 0., dt) / pidxy_norm;
           // pid_vel_msg.linear.x = pid_x_.compute(-1 * t_tello.transform.translation.x, 0., 0.1) / pidxy_norm;  // 100ms
           // pid_vel_msg.linear.y = pid_y_.compute(-1 * t_tello.transform.translation.y, 0., 0.1) / pidxy_norm;
             // -1 is for adjusting axis
@@ -86,7 +90,7 @@ class PidVelPublisher : public rclcpp::Node
           // debug_t_tello_pub->publish(t_tello);
 
         }catch(const tf2::TransformException & ex){
-          RCLCPP_WARN(this->get_logger(),
+          RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
             "Could not transform from camera_center_frame to marker_23_frame: %s", ex.what());
         }
 
@@ -114,8 +118,7 @@ class PidVelPublisher : public rclcpp::Node
 
     PIDController pid_x_;
     PIDController pid_y_;
-    int pixel_width_;
-    int pixel_height_;
+    rclcpp::Time last_time_;
 
 
     // rclcpp::Publisher<geometry_msgs::msg::TransformStamped>::SharedPtr debug_t_tello_pub;
