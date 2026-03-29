@@ -124,10 +124,9 @@ private:
         // visualization_msgs::msg::Marker land_dir;
         land_dir.header.stamp = msg->header.stamp;
         land_dir.header.frame_id = "camera_center_frame";
-        land_dir.vector.x = -1. * (tf_ar.transform.translation.x - cx);
-        land_dir.vector.y = -1. * (tf_ar.transform.translation.y - cy);
-        // land_dir.vector.x = tf_ar.transform.translation.x - cx;
-        // land_dir.vector.y = tf_ar.transform.translation.y - cy;
+        // translation.x/y は [pixel/100] 単位。cx/cy も揃えて [pixel/100] に変換して引く
+        land_dir.vector.x = -1. * (tf_ar.transform.translation.x - cx / 100.);
+        land_dir.vector.y = -1. * (tf_ar.transform.translation.y - cy / 100.);
         land_dir.vector.z = 0.;
         land_direction_pub_->publish(land_dir);
 
