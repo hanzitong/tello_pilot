@@ -6,9 +6,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "tello_msgs/srv/tello_action.hpp"
 
-// #include "../../tello_ros/tell_msgs/src/tello_action.hpp"
-// #include "TelloAction.srv"
 using namespace std::chrono_literals;
 
 
@@ -33,15 +32,14 @@ public:
     selected_twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
       "cmd_vel", 10
     );
+
+    // Service client for takeoff / land
+    action_client_ = this->create_client<tello_msgs::srv::TelloAction>("tello_action");
+
     timer_ = this->create_wall_timer(
       std::chrono::milliseconds(100),
       std::bind(&CmdMultiplexer::timer_callback, this)
     );
-
-    // client_ = this->create_client<tello_msgs::srv::TelloAction>("/tello_action");
-    // while (!client_->wait_for_service(1s)) {
-    //   RCLCPP_INFO(this->get_logger(), "Waiting for /tello_action service ...");
-    // }
   }
 
 private:
@@ -49,34 +47,24 @@ private:
   {
     last_joy_ = *joy_msg;
     got_joy_ = true;
-    // last_joy_time_ = this->now();
   }
 
   void pid_callback(const geometry_msgs::msg::Twist::SharedPtr pid_msg)
   {
     last_pid_ = *pid_msg;
-    // got_pid_ = true; // if pid_vel dead, Twist will be all 0 at pid_controller
   }
 
-  /* for calling takeoff service from joy */
-  // void send_takeoff()
-  // {
-  //   auto request = std::make_shared<TelloAction::Request>();
-  //   request->cmd = "takeoff";
-  //   RCLCPP_INFO(this->get_logger(), "Send takeoff command ...");
-
-  //   // async_send_request
-  //   client_->async_send_request(request);
-  // }
-
+  void send_action(const std::string & cmd)
+  {
+    auto request = std::make_shared<tello_msgs::srv::TelloAction::Request>();
+    request->cmd = cmd;
+    action_client_->async_send_request(request);
+    RCLCPP_INFO(this->get_logger(), "Sent tello_action: %s", cmd.c_str());
+  }
 
   void timer_callback()
   {
     geometry_msgs::msg::Twist selected_twist;
-    // rclcpp::Time now = this->now();
-    // bool joy_alive = (now - last_joy_time_) < joy_timeout_;
-    // bool joy_alive = (last_joy_time_ - now) < joy_timeout_;
-    // RCLCPP_INFO(this->get_logger(), "now time: %f", now.seconds());
 
     selected_twist.linear.x = 0.;
     selected_twist.linear.y = 0.;
@@ -85,54 +73,60 @@ private:
     selected_twist.angular.y = 0.;
     selected_twist.angular.z = 0.;
 
-    // if (joy_alive) {
     if (got_joy_) {
-      if (last_joy_.buttons[5] == 1) { // auto mode
-        // if exceed [-1, 1], it seems to be ignored ...
+      // --- 一発トリガー（ボタンの立ち上がりエッジで1回だけ送信）---
+      // Start（buttons[7]）: テイクオフ
+      if (rising_edge(7)) {
+        send_action("takeoff");
+      }
+      // Back（buttons[6]）: 手動着陸
+      if (rising_edge(6)) {
+        send_action("land");
+      }
+
+      // --- 速度コマンドの選択 ---
+      const auto nb = static_cast<int>(last_joy_.buttons.size());
+      const auto na = static_cast<int>(last_joy_.axes.size());
+      if (nb > 5 && last_joy_.buttons[5] == 1) {        // RB: 自動モード
         selected_twist.linear.x = last_pid_.linear.x;
         selected_twist.linear.y = last_pid_.linear.y;
-        // selected_twist.angular.x = last_pid_.angular.x;  // ignored at tello_driver
-        // selected_twist.angular.y = last_pid_.angular.y;  // ignored at tello_driver
         selected_twist.angular.z = last_pid_.angular.z;
-      } else if (last_joy_.buttons[4] == 1) {
+      } else if (nb > 4 && last_joy_.buttons[4] == 1) { // LB: テスト前進
         selected_twist.linear.x = 0.5;
         selected_twist.linear.y = 0.;
         selected_twist.angular.z = 0.;
-      } else {                        // manual mode
-        selected_twist.linear.x  =  last_joy_.axes[4];
-        selected_twist.linear.y  =  last_joy_.axes[3];
-        // selected_twist.angular.x  // ignored at tello_driver
-        // selected_twist.angular.y  // ignored at tello_driver
-        selected_twist.angular.z = last_joy_.axes[0];
+      } else {                                           // 手動モード
+        selected_twist.linear.x  = (na > 4) ? last_joy_.axes[4] : 0.;
+        selected_twist.linear.y  = (na > 3) ? last_joy_.axes[3] : 0.;
+        selected_twist.angular.z = (na > 0) ? last_joy_.axes[0] : 0.;
       }
-      selected_twist.linear.z  =  last_joy_.axes[1];
-
+      selected_twist.linear.z = (na > 1) ? last_joy_.axes[1] : 0.;
     }
 
     selected_twist_pub_->publish(selected_twist);
 
-    // if(got_joy_ && last_joy_.buttons[4] == 1){
-    //   send_takeoff();
-    // }
+    prev_joy_ = last_joy_;
+  }
+
+  // ボタン i の立ち上がりエッジを検出（前回0・今回1）
+  bool rising_edge(int i)
+  {
+    int cur  = (i < static_cast<int>(last_joy_.buttons.size()))  ? last_joy_.buttons[i]  : 0;
+    int prev = (i < static_cast<int>(prev_joy_.buttons.size()))  ? prev_joy_.buttons[i]  : 0;
+    return (prev == 0 && cur == 1);
+  }
 
 
-  } // timer_callback()
-
-
-  rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr   joy_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr pid_sub_;
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr selected_twist_pub_;
-  rclcpp::TimerBase::SharedPtr timer_;
-  // rclcpp::Client<TelloAction>::SharedPtr client_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr  selected_twist_pub_;
+  rclcpp::Client<tello_msgs::srv::TelloAction>::SharedPtr  action_client_;
+  rclcpp::TimerBase::SharedPtr                             timer_;
 
-  sensor_msgs::msg::Joy last_joy_;
+  sensor_msgs::msg::Joy   last_joy_;
+  sensor_msgs::msg::Joy   prev_joy_;
   geometry_msgs::msg::Twist last_pid_;
   bool got_joy_{false};
-  // bool joy_alive_{false};
-  // rclcpp::Time last_joy_time_{0};
-  // rclcpp::Duration joy_timeout_{0, 500000000};
-  // bool got_pid_{false};
-
 };
 
 
@@ -143,4 +137,3 @@ int main(int argc, char **argv)
   rclcpp::shutdown();
   return 0;
 }
-
