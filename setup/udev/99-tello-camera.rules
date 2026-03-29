@@ -1,0 +1,9 @@
+# Tello 地上カメラ用 udev ルール
+#
+# このファイルは setup/install_udev.sh によって自動生成されます。
+# カメラを接続した状態で install_udev.sh を実行してください。
+#
+# 生成後、カメラは常に /dev/video_tello として認識されます。
+# カメラを抜き差しした後に ls -la /dev/video_tello で確認できます。
+
+SUBSYSTEM=="video4linux", ATTRS{idVendor}=="VENDOR_ID", ATTRS{idProduct}=="PRODUCT_ID", SYMLINK+="video_tello"
