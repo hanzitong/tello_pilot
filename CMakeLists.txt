@@ -76,6 +76,23 @@ install(TARGETS pid_controller
 
 
 
+add_executable(auto_lander
+  src/auto_lander.cpp
+)
+ament_target_dependencies(auto_lander
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  tello_msgs
+)
+install(TARGETS auto_lander
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+
 install(
   DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}/launch
