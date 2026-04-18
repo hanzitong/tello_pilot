@@ -10,4 +10,15 @@ ros2 service call /tello_action tello_msgs/TelloAction "{cmd: 'land'}"
 ros2 service call /tello_action tello_msgs/TelloAction "{cmd: 'battery?'}"
 
 
+// use Web camera with MJPEG to reduce ratency
+gst-launch-1.0 \
+  v4l2src device=/dev/video0 \
+  ! image/jpeg,width=640,height=480,framerate=30/1 \
+  ! queue max-size-buffers=1 leaky=downstream \
+  ! jpegdec \
+  ! videoconvert \
+  ! clockoverlay time-format="%H:%M:%S" \
+  ! queue max-size-buffers=1 leaky=downstream \
+  ! autovideosink sync=false
+
 
