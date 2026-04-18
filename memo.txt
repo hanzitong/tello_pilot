@@ -10,7 +10,7 @@ ros2 service call /tello_action tello_msgs/TelloAction "{cmd: 'land'}"
 ros2 service call /tello_action tello_msgs/TelloAction "{cmd: 'battery?'}"
 
 
-// use Web camera with MJPEG to reduce ratency
+// use Web camera with MJPEG to reduce latency
 gst-launch-1.0 \
   v4l2src device=/dev/video0 \
   ! image/jpeg,width=640,height=480,framerate=30/1 \
