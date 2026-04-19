@@ -3,14 +3,8 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 import os
 from ament_index_python.packages import get_package_share_directory
-pkg_share = get_package_share_directory('tello_pilot')
 
-_video_tello = '/dev/video_tello'
-if os.path.exists(_video_tello):
-    _actual_device = os.path.realpath(_video_tello)
-    cam_index = int(_actual_device.replace('/dev/video', ''))
-else:
-    cam_index = 4  # フォールバック: udev 未設定時
+pkg_share = get_package_share_directory('tello_pilot')
 # rviz_cinfig = os.path.join(
 #     pkg_share,
 #     'config',
@@ -18,97 +12,123 @@ else:
 # )
 
 
-pc_cam_pixels = [1920, 1080]
-usb_cam_pixels = [640, 480]
-realsense_cam_pixels = [0, 0]
+realsense_cam_pixels = [-1, -1]
+pc_cam_pixels = {
+    'width': 1920,
+    'height': 1080
+}
+usb_cam_pixels = {
+    'width': 640,
+    'height': 480
+}
+calibration_file_path = os.path.join(
+    get_package_share_directory('tello_pilot'),
+    'config',
+    'ost.yaml'
+)
 
 
 def generate_launch_description():
-    node_list = [
+
+    usb_cam = Node(
+        package='usb_cam',
+        executable='usb_cam_node_exe',
+        name='usb_cam_node',
+        output='screen',
+        parameters=[
+            {
+                'video_device': '/dev/video_tello', # it may sometimes be changed automatically
+                'image_width': usb_cam_pixels['width'],
+                'image_height': usb_cam_pixels['height'],
+                'camera_frame_id': 'camera_frame',
+                'camera_info_url': f'file://{calibration_file_path}',
+                # 'camera_info_url': 'file:///home/han_zitong/ws_tello/install/tello_pilot/share/tello_pilot/config/ost.yaml',
+
+                # ===== Use YUYV
+                'pixel_format': 'yuyv',
+                'framerate': 25.0,
+
+                # ===== Use MJPEG
+                # 'pixel_format': 'mjpeg2rgb',
+                # 'framerate': 30.0,  # 30fps max
+            }
+        ],
+        remappings=[
+            ('/image_raw', '/camera/image_raw'),
+        ],
+        respawn=True,
+        # respawn_delay=0.2,
+    )
+
+    tf_node = Node(       # PC camera center frame [pixel] (1920x1080)
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=[
+            # '--x', '9.6',   # [100 * pixel]
+            # '--y', '5.4',   # [100 * pixel]
+            '--x', str(usb_cam_pixels['width']/2/100),   # [100 * pixel]
+            '--y', str(usb_cam_pixels['height']/2/100),   # [100 * pixel]
+            '--z', '0',
+            '--yaw', '0',
+            '--pitch', '0',
+            '--roll', '0',
+            '--frame-id', 'camera_frame',
+            '--child-frame-id', 'camera_center_frame'
+        ]
+    )
+
+    joy_node = Node(
+        package='joy',
+        executable='joy_node',
+        output='screen',
+    )
+
+    tello_node_list = [
         Node(
-            package='opencv_cam',
-            executable='opencv_cam_main',
-            name='opencv_cam',
+            package='tello_driver',
+            executable='tello_driver_main',
             output='screen',
-            parameters=[
-                {'index': cam_index},    # /dev/tello_cam が指すデバイス番号
-                {'width': pc_cam_pixels[0]},
-                {'height': pc_cam_pixels[1]},
-                {'fps': 30},
-                {'camera_frame_id': 'camera_cv_frame'},
-            ],
-            remappings=[('/image_raw', '/cam_image_raw')],
         ),
-        # Node(
-        #     package='opencv_cam',
-        #     executable='opencv_cam_main',
-        #     name='opencv_cam',
-        #     output='screen',
-        #     parameters=[
-        #         {'index': 4},
-        #         {'image_width': 640},
-        #         {'image_height': 480},
-        #         {'framerate': 25},
-        #         {'camera_frame_id': 'camera_cv_frame'},
-        #     ],
-        #     remappings=[('/image_raw', '/cam_image_raw')],
-        # ),
-        Node(       # PC camera center frame [pixel] (1920x1080)
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            arguments=[
-                # '--x', '9.6',   # [100 * pixel]
-                # '--y', '5.4',   # [100 * pixel]
-                '--x', str(pc_cam_pixels[0]/2/100),   # [100 * pixel]
-                '--y', str(pc_cam_pixels[1]/2/100),   # [100 * pixel]
-                '--z', '0',
-                '--yaw', '0',
-                '--pitch', '0',
-                '--roll', '0',
-                '--frame-id', 'camera_cv_frame',
-                '--child-frame-id', 'camera_center_frame'
+        Node(
+            package='tello_pilot',
+            executable='ar_detector_node',
+            name='ar_detector_node',
+            output='screen',
+            remappings=[
+                ('/cam_image_raw', '/camera/image_raw')
             ]
         ),
-        
-        Node(
-            package='joy',
-            executable='joy_node',
-            output='screen',
-        ),
-        # Node(
-        #     package='tello_driver',
-        #     executable='tello_driver_main',
-        #     output='screen',
-        # ),
-
         Node(
             package='tello_pilot',
-            executable='ar_detector',
+            executable='cmd_multiplexer_node',
             output='screen',
         ),
         Node(
             package='tello_pilot',
-            executable='cmd_multiplexer',
+            executable='pid_controller_node',
             output='screen',
         ),
         Node(
             package='tello_pilot',
-            executable='pid_controller',
+            executable='auto_lander_node',
             output='screen',
         ),
         Node(
             package='tello_pilot',
-            executable='auto_lander',
+            executable='cmd_vel_visualizer_node',
             output='screen',
         ),
-
-
     ]
 
+    rviz = Node(
+        package='rviz2',
+        executable='rviz2',
+        output='screen',
+    )
 
-    return LaunchDescription(node_list)
 
-
+    return LaunchDescription([usb_cam] + [joy_node] + [tf_node] + tello_node_list + [rviz])
+    # return LaunchDescription([joy_node])
 
 
 
