@@ -23,10 +23,10 @@ include_directories(include)
 include_directories(srv)
 
 
-add_executable(ar_detector
-  src/ar_detector_tf2.cpp
+add_executable(ar_detector_node
+  src/ar_detector_node.cpp
 )
-ament_target_dependencies(ar_detector
+ament_target_dependencies(ar_detector_node
   rclcpp
   OpenCV
   cv_bridge
@@ -38,15 +38,15 @@ ament_target_dependencies(ar_detector
   tf2_ros
   tf2_geometry_msgs
 )
-install(TARGETS ar_detector
+install(TARGETS ar_detector_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
 
-add_executable(cmd_multiplexer
-  src/cmd_multiplexer.cpp
+add_executable(cmd_multiplexer_node
+  src/cmd_multiplexer_node.cpp
 )
-ament_target_dependencies(cmd_multiplexer
+ament_target_dependencies(cmd_multiplexer_node
   rclcpp
   sensor_msgs
   geometry_msgs
@@ -55,31 +55,31 @@ ament_target_dependencies(cmd_multiplexer
   tf2_geometry_msgs
   tello_msgs
 )
-install(TARGETS cmd_multiplexer
+install(TARGETS cmd_multiplexer_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
 
-add_executable(pid_controller
-  src/pid_controller.cpp
+add_executable(pid_controller_node
+  src/pid_controller_node.cpp
 )
-ament_target_dependencies(pid_controller
+ament_target_dependencies(pid_controller_node
   rclcpp
   geometry_msgs
   tf2
   tf2_ros
   tf2_geometry_msgs
 )
-install(TARGETS pid_controller
+install(TARGETS pid_controller_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
 
 
-add_executable(auto_lander
-  src/auto_lander.cpp
+add_executable(auto_lander_node
+  src/auto_lander_node.cpp
 )
-ament_target_dependencies(auto_lander
+ament_target_dependencies(auto_lander_node
   rclcpp
   sensor_msgs
   geometry_msgs
@@ -88,7 +88,7 @@ ament_target_dependencies(auto_lander
   tf2_geometry_msgs
   tello_msgs
 )
-install(TARGETS auto_lander
+install(TARGETS auto_lander_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -99,26 +99,27 @@ install(
 )
 
 install(
-  DIRECTORY models worlds urdf
+  DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
 
 install(
-  PROGRAMS
-    scripts/gen_aruco_marker.py
-    src/sim_tello_driver.py
-  DESTINATION lib/${PROJECT_NAME}
+  DIRECTORY models worlds urdf
+  DESTINATION share/${PROJECT_NAME}
 )
+
+## these programs can be ran with "ros2 run"
+# install(
+#   PROGRAMS
+#     ar_marker/gen_aruco_marker.py
+#     script/sim_tello_driver.py
+#   DESTINATION lib/${PROJECT_NAME}
+# )
 
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
