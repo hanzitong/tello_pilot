@@ -37,10 +37,23 @@ public:
     action_client_ = this->create_client<tello_msgs::srv::TelloAction>("tello_action");
 
     timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(100),
+      std::chrono::milliseconds(30),
       std::bind(&CmdMultiplexer::timer_callback, this)
     );
   }
+
+private:
+  rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr   joy_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr pid_sub_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr  selected_twist_pub_;
+  rclcpp::Client<tello_msgs::srv::TelloAction>::SharedPtr  action_client_;
+  rclcpp::TimerBase::SharedPtr                             timer_;
+
+  sensor_msgs::msg::Joy   last_joy_;
+  sensor_msgs::msg::Joy   prev_joy_;
+  geometry_msgs::msg::Twist last_pid_;
+  bool got_joy_{false};
+
 
 private:
   void joy_callback(const sensor_msgs::msg::Joy::SharedPtr joy_msg)
@@ -117,16 +130,6 @@ private:
   }
 
 
-  rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr   joy_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr pid_sub_;
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr  selected_twist_pub_;
-  rclcpp::Client<tello_msgs::srv::TelloAction>::SharedPtr  action_client_;
-  rclcpp::TimerBase::SharedPtr                             timer_;
-
-  sensor_msgs::msg::Joy   last_joy_;
-  sensor_msgs::msg::Joy   prev_joy_;
-  geometry_msgs::msg::Twist last_pid_;
-  bool got_joy_{false};
 };
 
 

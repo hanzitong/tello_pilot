@@ -1,5 +1,5 @@
 /*
-auto_detector_tf2.cpp
+old name: auto_detector_tf2.cpp
 
 */
 
@@ -45,41 +45,41 @@ public:
 private:
   void imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
   {
-    // Convert ROS image topic to OpenCV image matrix
+    /* [STEP 1] Convert ROS image topic to OpenCV image matrix */
     auto cv_ptr = cv_bridge::toCvCopy(msg, "bgr8");
+    // auto cv_ptr = cv_bridge::toCvShare(msg, "bgr8");   // have not tried
     cv::Mat image_ar = cv_ptr->image;
 
-    // Detect marker
+    /* [STEP 2] Detect marker */
     std::vector<int> ids;
     std::vector<std::vector<cv::Point2f>> corners;
     cv::aruco::detectMarkers(image_ar, dictionary_, corners, ids, parameters_);
     geometry_msgs::msg::Twist twist_msg;
 
-    // calculate image center position [pixel]
+    /* [STEP 3] calculate image center position [pixel] */
     int cx = image_ar.cols / 2;
     int cy = image_ar.rows / 2;
     // RCLCPP_INFO(this->get_logger(), "camera image center: %d, %d", cx, cy);
 
-    // Estimage AR pose & translation > Register
+    /* [STEP 4] Estimage AR pose & translation > Register */
     if (!ids.empty()) {
       // calculate marker center position[pixel]
       int ar_pixel_posx = cvRound((corners[0][0].x + corners[0][1].x + corners[0][2].x + corners[0][3].x) * 0.25);
       int ar_pixel_posy = cvRound((corners[0][0].y + corners[0][1].y + corners[0][2].y + corners[0][3].y) * 0.25);
-      // RCLCPP_INFO(this->get_logger(), "ar_pixel(x): %d", ar_pixel_posx);
-      // RCLCPP_INFO(this->get_logger(), "ar_pixel(y): %d", ar_pixel_posy);
+      // RCLCPP_INFO(this->get_logger(), "ar_pixel(x): %d, ar_pixel(y): %d", ar_pixel_posx, ar_pixel_posy);
 
-      // Skip camera caribration step
-      cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);
-      cv::Mat distCoeffs   = cv::Mat::zeros(5, 1, CV_64F);
-      double markerLength  = 0.5; // test:0.03[m]
+      // [STEP 4.1] Skip camera caribration step
+      cv::Mat cameraMatrix = cv::Mat::eye(3, 3, CV_64F);    // TODO: put real value
+      cv::Mat distCoeffs   = cv::Mat::zeros(5, 1, CV_64F);  // TODO: put real value
+      double markerLength  = 0.03; // [m]. drone marker
 
-      // Estimate AR marker poses
+      // [STEP 4.2] Estimate AR marker poses
       std::vector<cv::Vec3d> rvecs, tvecs;  // rvecs is needed for calculate rotation
       cv::aruco::estimatePoseSingleMarkers(corners, markerLength, cameraMatrix, distCoeffs, rvecs, tvecs);
-      // RCLCPP_INFO(this->get_logger(), "(AR POSE)\n  rvecs: %f, %f, %f\n  tvecs: %f , %f, %f",
-      //   rvecs[0][0], rvecs[0][1], rvecs[0][2], tvecs[0][0], tvecs[0][1], tvecs[0][2]);
+      RCLCPP_INFO(this->get_logger(), "(AR POSE)\n  rvecs: %f, %f, %f\n  tvecs: %f , %f, %f",
+        rvecs[0][0], rvecs[0][1], rvecs[0][2], tvecs[0][0], tvecs[0][1], tvecs[0][2]);
 
-      // Register tf2 of detected AR marker
+      // [STEP 4.3] Register tf2 of detected AR marker
       for (size_t i = 0; i < 1; ++i) {  // care about only the first AR marker now
         // Put translational and rotational elements into tf-msg and broadcast it
         /* BE CAREFULL !!!  by Han Zitong :
@@ -93,11 +93,11 @@ private:
         */
         geometry_msgs::msg::TransformStamped tf_ar;
         tf_ar.header.stamp    = msg->header.stamp;
-        tf_ar.header.frame_id = "camera_cv_frame";
+        tf_ar.header.frame_id = "camera_frame";
         tf_ar.child_frame_id  = "marker_" + std::to_string(ids[i]) + "_frame"; // test marker: 23
         tf_ar.transform.translation.x = ar_pixel_posx / 100.; // [100 * pixel]
         tf_ar.transform.translation.y = ar_pixel_posy / 100.; // [100 * pixel]
-        tf_ar.transform.translation.z = 0;
+        tf_ar.transform.translation.z = 0;  // Be careful. x & y will be flipped.(???)
 
         cv::Mat R_ar;
         cv::Rodrigues(rvecs[i], R_ar);  // get rotation matrix from rvecs
@@ -172,6 +172,8 @@ private:
 
   } // image_callback() function
 
+
+private:
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_pub_;
 
@@ -179,9 +181,10 @@ private:
   // rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr land_direction_pub_;
   // rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr land_direction_pub_;
 
+  std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+
   cv::Ptr<cv::aruco::Dictionary> dictionary_;
   cv::Ptr<cv::aruco::DetectorParameters> parameters_;
-  std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 }; // ArucoDetectorNode class
 
 

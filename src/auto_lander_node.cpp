@@ -41,6 +41,18 @@ public:
     }
 
 private:
+    rclcpp::TimerBase::SharedPtr                              timer_;
+    rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr    joy_sub_;
+    rclcpp::Client<tello_msgs::srv::TelloAction>::SharedPtr   land_client_;
+    std::shared_ptr<tf2_ros::TransformListener>               tf_listener_{nullptr};
+    std::unique_ptr<tf2_ros::Buffer>                          tf_buffer_;
+
+    sensor_msgs::msg::Joy last_joy_;
+    bool got_joy_{false};
+    int  converge_count_{0};
+    bool landed_{false};
+
+private:
     void joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
     {
         last_joy_ = *msg;
@@ -90,17 +102,6 @@ private:
             land_client_->async_send_request(request);
         }
     }
-
-    rclcpp::TimerBase::SharedPtr                              timer_;
-    rclcpp::Subscription<sensor_msgs::msg::Joy>::SharedPtr    joy_sub_;
-    rclcpp::Client<tello_msgs::srv::TelloAction>::SharedPtr   land_client_;
-    std::shared_ptr<tf2_ros::TransformListener>               tf_listener_{nullptr};
-    std::unique_ptr<tf2_ros::Buffer>                          tf_buffer_;
-
-    sensor_msgs::msg::Joy last_joy_;
-    bool got_joy_{false};
-    int  converge_count_{0};
-    bool landed_{false};
 };
 
 
