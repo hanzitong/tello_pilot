@@ -11,7 +11,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMPLATE="${SCRIPT_DIR}/udev/99-tello-camera.rules"
+# TEMPLATE="${SCRIPT_DIR}/udev/99-tello-camera.rules"
+TEMPLATE="${SCRIPT_DIR}/99-tello-camera.rules"
 DEST="/etc/udev/rules.d/99-tello-camera.rules"
 SYMLINK_NAME="video_tello"  # udev が作成するシンボリックリンク名
 
