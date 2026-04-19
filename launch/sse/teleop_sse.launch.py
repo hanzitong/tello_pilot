@@ -45,7 +45,8 @@ def generate_launch_description():
             name='opencv_cam',
             output='screen',
             parameters=[
-                {'index': cam_index},    # /dev/tello_cam が指すデバイス番号
+                {'index': 0},    # /dev/tello_cam が指すデバイス番号
+                # {'index': cam_index},    # /dev/tello_cam が指すデバイス番号
                 {'width': cam_pixels[0]},
                 {'height': cam_pixels[1]},
                 {'fps': 25},            # YUYV 640x480 max fps
