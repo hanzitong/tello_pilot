@@ -93,9 +93,24 @@ install(TARGETS auto_lander_node
 )
 
 
+add_executable(cmd_vel_visualizer_node
+  src/cmd_vel_visualizer_node.cpp
+)
+ament_target_dependencies(cmd_vel_visualizer_node
+  rclcpp
+  OpenCV
+  cv_bridge
+  sensor_msgs
+  geometry_msgs
+)
+install(TARGETS cmd_vel_visualizer_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+
 install(
   DIRECTORY launch
-  DESTINATION share/${PROJECT_NAME}/launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
 install(
