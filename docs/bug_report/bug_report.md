@@ -76,6 +76,86 @@ land_dir.vector.x = -1. * (tf_ar.transform.translation.x - cx / 100.);
 
 ---
 
+---
+
+### Bug E — CMakeLists.txt: 実行ファイル名と launch ファイルの不一致（致命的）
+
+**ファイル:** `src/tello_pilot/CMakeLists.txt`
+**症状:** `ros2 launch` 実行時に `executable not found` エラーでノードが起動しない
+
+**原因:**
+`CMakeLists.txt` の `add_executable` で付けた名前（`_node` サフィックスあり）と、
+launch ファイルの `executable` パラメータが一致していない。
+
+| CMakeLists.txt（インストールされるバイナリ名） | launch の executable 指定 |
+|---------------------------------------------|--------------------------|
+| `ar_detector_node` | `ar_detector` |
+| `pid_controller_node` | `pid_controller` |
+| `cmd_multiplexer_node` | `cmd_multiplexer` |
+| `auto_lander_node` | `auto_lander` |
+
+**修正方針:**
+CMakeLists.txt の `add_executable` 名から `_node` サフィックスを除いて launch 側に統一する。
+（launch ファイルを変更する方法もあるが、ノード名は短い方が `ros2 run` での利便性が高い）
+
+---
+
+---
+
+### Bug F — pid_controller / auto_lander: マーカーロスト後も古い TF で制御が継続する（致命的）
+
+**ファイル:**
+- `src/tello_pilot/src/pid_controller_node.cpp` L68
+- `src/tello_pilot/src/auto_lander_node.cpp` L75
+
+**症状:**
+ARマーカーを一度検出してからロスト（視野外に出る・遮蔽など）すると、
+ロスト前の最後の位置情報を使ったまま PID 速度指令の出力が継続する。
+最悪の場合、`auto_lander` が誤って着陸コマンドを発行する。
+
+**原因:**
+
+`pid_controller_node.cpp`（L68）と `auto_lander_node.cpp`（L75）の両方で:
+```cpp
+t = tf_buffer_->lookupTransform(
+    "camera_center_frame", "marker_23_frame", tf2::TimePointZero);
+```
+
+`tf2::TimePointZero` は「TF2 バッファ内の最新値をそのまま返す」という意味。
+TF2 のキャッシュ保持時間はデフォルト **10秒** であり、マーカーをロストしても
+最後に検出した位置の TF が最大 10 秒間キャッシュに残り続ける。
+
+`TransformException` は TF が**一度も届いていない**か**キャッシュ期限切れ**の場合のみ投げられる。
+`tf2::TimePointZero` ではキャッシュ期限内は例外が投げられないため、
+catch 節は機能せず、古い TF 値がそのまま使われ続ける。
+
+```
+ar_detector: マーカーロスト → TF broadcast 停止
+TF2 バッファ: 最後の TF 値を最大 10 秒間保持  ← ここが問題
+pid_controller: lookupTransform が古い値を返す → PID 出力継続  ← 危険
+auto_lander: 古い収束位置でカウント継続 → 誤着陸コマンドの可能性  ← 危険
+```
+
+**修正方針:**
+
+`lookupTransform` 成功後に TF の timestamp を確認し、
+一定時間以上古い場合はマーカーロストとして扱う。
+
+```cpp
+// lookupTransform 後に staleness チェックを追加
+rclcpp::Time tf_stamp(t.header.stamp.sec, t.header.stamp.nanosec, RCL_ROS_TIME);
+if ((this->now() - tf_stamp).seconds() > kMaxStaleSec) {
+    // ロスト扱い: PID は 0 出力 / auto_lander はカウンタリセット
+    converge_count_ = 0;
+    return;
+}
+```
+
+`kMaxStaleSec` の推奨値: `0.5` 秒（カメラ 25fps の 12〜13 フレーム分）。
+カメラのフレームレートより十分長いが、制御の安全性には十分短い値。
+
+---
+
 ## 未修正の既知の課題（実機テストが必要）
 
 ### 課題 E — 画像軸とドローン軸の対応
@@ -99,5 +179,5 @@ land_dir.vector.x = -1. * (tf_ar.transform.translation.x - cx / 100.);
 |------|---------|
 | `last_pid_` 未初期化 | `geometry_msgs::msg::Twist` はゼロ値で default 構築される |
 | PID error 符号 | 前回のデバッグで修正済み（TF lookup の引数順序を修正）|
-| `tf2::TimePointZero` | 最新 TF を取得する意図的な使用 |
+| `tf2::TimePointZero` | ~~最新 TF を取得する意図的な使用~~ → Bug F として再分類（古い TF がキャッシュから返される問題） |
 | 収束判定の `async_send_request` | サービス未接続時も non-fatal（cam_dev では意図的にサービスなし）|
