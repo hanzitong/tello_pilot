@@ -6,18 +6,13 @@ import math
 from ament_index_python.packages import get_package_share_directory
 
 pkg_share = get_package_share_directory('tello_pilot')
-# rviz_cinfig = os.path.join(
-#     pkg_share,
-#     'config',
-#     'teleop_sse_config.rviz'
-# )
+rviz_config = os.path.join(pkg_share, 'config', 'tello_test.rviz')
 
 
-realsense_cam_pixels = [-1, -1]
-pc_cam_pixels = {
-    'width': 1920,
-    'height': 1080
-}
+# pc_cam_pixels = {
+#     'width': 1920,
+#     'height': 1080
+# }
 usb_cam_pixels = {
     'width': 640,
     'height': 480
@@ -61,7 +56,7 @@ def generate_launch_description():
         # respawn_delay=0.2,
     )
 
-    camera_frame_node = Node(
+    camera_frame = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         arguments=[
@@ -78,7 +73,7 @@ def generate_launch_description():
 
     # drone_frame: marker_23_frame を X 軸回りに 180° 回転するとドローン座標系になる
     # ARマーカーの Z 軸（カメラ方向）が反転し、ドローンの Z 軸（上方向）に対応する
-    drone_frame_node = Node(
+    drone_frame = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         arguments=[
@@ -129,9 +124,14 @@ def generate_launch_description():
             executable='auto_lander_node',
             output='screen',
         ),
+        # Node(
+        #     package='tello_pilot',
+        #     executable='cmd_vel_img_visualizer_node',
+        #     output='screen',
+        # ),
         Node(
             package='tello_pilot',
-            executable='cmd_vel_visualizer_node',
+            executable='cmd_vel_arrow_visualizer_node',
             output='screen',
         ),
     ]
@@ -139,11 +139,12 @@ def generate_launch_description():
     rviz = Node(
         package='rviz2',
         executable='rviz2',
+        arguments=['-d', rviz_config],
         output='screen',
     )
 
 
-    return LaunchDescription([usb_cam] + [joy_node] + [camera_frame_node, drone_frame_node] + tello_node_list + [rviz])
+    return LaunchDescription([usb_cam] + [joy_node] + [camera_frame, drone_frame] + tello_node_list + [rviz])
     # return LaunchDescription([joy_node])
 
 

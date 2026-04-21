@@ -30,8 +30,7 @@ double PIDController::compute(double current_pos, double goal_pos, double dt)
 {
     if (dt <= 0.0) return 0.0;
 
-    // double error = goal_pos - current_pos;
-    double error = current_pos - goal_pos;
+    double error = goal_pos - current_pos;
 
     integral_ += error * dt;
     if (integral_ > i_max_) integral_ = i_max_;

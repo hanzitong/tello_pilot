@@ -69,9 +69,6 @@ ament_target_dependencies(cmd_multiplexer_node
   rclcpp
   sensor_msgs
   geometry_msgs
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
   tello_msgs
 )
 install(TARGETS cmd_multiplexer_node
@@ -112,17 +109,32 @@ install(TARGETS auto_lander_node
 )
 
 
-add_executable(cmd_vel_visualizer_node
-  src/cmd_vel_visualizer_node.cpp
+add_executable(cmd_vel_img_visualizer_node
+  src/cmd_vel_img_visualizer_node.cpp
 )
-ament_target_dependencies(cmd_vel_visualizer_node
+ament_target_dependencies(cmd_vel_img_visualizer_node
   rclcpp
   OpenCV
   cv_bridge
   sensor_msgs
   geometry_msgs
+  tf2
+  tf2_ros
 )
-install(TARGETS cmd_vel_visualizer_node
+install(TARGETS cmd_vel_img_visualizer_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+
+add_executable(cmd_vel_arrow_visualizer_node
+  src/cmd_vel_arrow_visualizer_node.cpp
+)
+ament_target_dependencies(cmd_vel_arrow_visualizer_node
+  rclcpp
+  geometry_msgs
+  visualization_msgs
+)
+install(TARGETS cmd_vel_arrow_visualizer_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

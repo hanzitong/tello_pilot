@@ -2,114 +2,144 @@
 
 ## 症状
 
-ARマーカーを認識しているにもかかわらず、`pid_controller_node` が
+ARマーカーを認識しているはずなのに、`pid_controller_node` が
 「マーカーロスト」として PID 出力をゼロにし続ける。
 
 ```
 [pid_controller_node] [WARN] Stale TF (165.62s): marker lost. Stopping PID.
 [pid_controller_node] [WARN] Stale TF (166.72s): marker lost. Stopping PID.
 [pid_controller_node] [WARN] Stale TF (167.72s): marker lost. Stopping PID.
-[pid_controller_node] [WARN] Stale TF (168.72s): marker lost. Stopping PID.
 ...（1秒ごとに 1s ずつ増加し続ける）
 ```
 
-ドローンは飛行中・マーカーは映像内に見えているのに、速度指令がゼロになる。
+---
+
+## 原因の分析
+
+### 「165s」の意味
+
+`(this->now() - tf_stamp).seconds() = 165` は、**2つの時刻が同じエポックを使っており、TF が 165 秒前に最後に更新されたことを示している。**
+
+もし V4L2 の `CLOCK_MONOTONIC`（OS 起動後の相対時刻 ≈ 165 s）と
+ROS の `CLOCK_REALTIME`（Unix エポック基準 ≈ 1,776,740,400 s）のずれが原因なら、
+差は約 **17 億秒** になるはずで、`165s` にはならない。
+
+```
+CLOCK_MONOTONIC ≈ 165 s
+CLOCK_REALTIME  ≈ 1,776,740,400 s
+差              ≈ 1,776,740,235 s  ← "165.62s" とは程遠い
+```
+
+→ 時刻源の種類の違いは今回の直接原因ではない。
+
+### 本当の原因: TF が 165 秒間 broadcast されていない
+
+`ar_detector_node_2` は `/camera_info` を受信するまで
+`camera_matrix_ready_ = false` のまま `imageCallback` の先頭で `return` する。
+
+```cpp
+if (!camera_matrix_ready_) {
+    RCLCPP_WARN_THROTTLE(..., "Waiting for /camera_info ...");
+    return;   // ← TF は broadcast されない
+}
+```
+
+`/camera_info` が正しいトピック名で届いていない場合、
+このノードは TF を一切 broadcast しない。
+
+### tf2::TimePointZero が例外を投げない理由
+
+`lookupTransform(target, source, tf2::TimePointZero)` は
+「バッファ内の最新の値を返す」という意味で、
+**キャッシュの有効期限（デフォルト 10 秒）に関わらず例外を投げない。**
+
+```
+ar_detector_node_2:  TF broadcast 停止（camera_info 未受信）
+                         ↓
+TF2 バッファ:  最後に受け取った TF を保持し続ける（期限に関係なく）
+                         ↓
+pid_controller:  lookupTransform 成功（例外なし）→ 165 秒前の TF を受け取る
+                         ↓
+staleness チェック発火  "Stale TF (165.62s)"
+```
+
+これは Bug F（`tf2::TimePointZero` によるマーカーロスト後の古い TF 使用）と
+同じ根本メカニズムである。
 
 ---
 
-## 原因: カメラドライバの時刻源と ROS クロックの不一致
-
-### ROS 2 における時刻源の種類
-
-ROS 2 ノードの `this->now()` は **ROS クロック** を使用する。
-`use_sim_time = false`（実機動作）のとき ROS クロックは **Unix エポック基準の POSIX 時刻** に対応する。
-
-一方、USB カメラドライバ（usb_cam）が画像ヘッダに埋め込むタイムスタンプは、
-カーネルの **V4L2 タイムスタンプ**（`CLOCK_MONOTONIC`、OS 起動時点からの相対時刻）を
-使うことがある。
-
-```
-ROS クロック : Unix エポック基準 ≒ 1776740400 s（現在の絶対時刻）
-V4L2 タイムスタンプ : OS 起動からの経過時間 ≒ 165 s
-差分             : ≒ 1776740235 s ← 非常に大きい
-```
-
-なぜ 165 s 程度の差に見えたかというと、staleness チェックは
-`(now - tf_stamp).seconds() > kMaxStaleSec (= 0.5)` で判定しており、
-**165 s は「OS 起動後 165 秒で実験を開始した」ときの V4L2 相対時刻**に相当する。
-つまり `tf_stamp ≈ 165 s（起動後経過秒）` であり `now ≈ 1776740400 s（Unix 時刻）` なので
-差は実際には 10 億秒オーダーだが、差が 0.5 s を超えていることは確かである。
-
-### データの流れと問題箇所
+## データフローと問題箇所
 
 ```
 usb_cam
-  └─ 画像を publish（header.stamp = V4L2 タイムスタンプ ≈ 165 s）
+  └─ 画像を publish（/camera/image_raw）
+  └─ カメラ情報を publish（/camera_info または別トピック？）
 
 ar_detector_node_2
-  └─ 画像を受信し、marker_23_frame の TF を broadcast
-       ts.header.stamp = msg->header.stamp;  ← ここで V4L2 タイムスタンプを引き継ぐ
-       （TF のタイムスタンプ ≈ 165 s）
+  └─ /camera_info 未受信 → camera_matrix_ready_ = false
+  └─ imageCallback で即 return → TF broadcast なし
 
 pid_controller_node
-  └─ lookupTransform("camera_frame", "drone_frame") → t
-       t.header.stamp ≈ 165 s
-       this->now()    ≈ 1776740400 s
-       差 ≈ 1776740235 s  >> kMaxStaleSec (0.5 s)
-       → "Stale TF: marker lost" と誤判定  ← バグ
+  └─ lookupTransform("camera_frame", "drone_frame", TimePointZero)
+       → 165 秒前の古い TF が返る（例外なし）
+       → staleness チェック: 165 s >> kMaxStaleSec (0.5 s) → 発火
 ```
-
-### なぜ差が「1秒ごとに 1 s ずつ増加」したのか
-
-V4L2 タイムスタンプは OS 起動後の経過時間なので 1 s/s で増加する。
-ROS クロックも 1 s/s で進む。両者の進み方は同じなので差は**一定**のはずだが、
-ログでは差が増加しているように見える。
-
-これは TF が**更新されていない**（＝マーカー検出に失敗している可能性）か、
-あるいは `RCLCPP_WARN_THROTTLE` のスロットリング期間（1000 ms）の関係で
-表示タイミングがずれているためである。実際には差はほぼ一定値（OS 起動後経過秒数）。
 
 ---
 
 ## 修正
 
-`ar_detector_node_2.cpp` で TF のスタンプを `msg->header.stamp` ではなく
-`this->now()`（ROS クロック）に変更する。
+### 根本原因: /camera_info の受信確認
 
-```cpp
-// 修正前
-ts.header.stamp = msg->header.stamp;   // V4L2 タイムスタンプ（異なる時刻源）
+`ar_detector_node_2` が `/camera_info` を受信しているか確認する。
 
-// 修正後
-ts.header.stamp = this->now();         // ROS クロック（staleness チェックと同一時刻源）
+```bash
+ros2 topic list | grep camera_info
+ros2 topic hz /camera_info
 ```
 
-これにより TF のタイムスタンプと `pid_controller_node` の `this->now()` が
-同じ時刻源を参照し、staleness チェックが正しく機能する。
+usb_cam が `/camera_info` を別トピック名（例: `/usb_cam_node/camera_info`）で
+publish している場合は launch ファイルに remapping を追加する。
 
-### トレードオフ
+### 副次的修正: TF スタンプを this->now() に統一
 
-`this->now()` はカメラが画像をキャプチャした瞬間ではなく、
-`ar_detector_node_2` がその画像を処理してTFをbroadcastした瞬間の時刻になる。
-画像のキャプチャから TF broadcast までの遅延（通常 < 数十 ms）が含まれる。
+`ar_detector_node_2.cpp` の TF スタンプを `msg->header.stamp` から `this->now()` に変更する。
+将来カメラドライバが異なる時刻源（V4L2 の `CLOCK_MONOTONIC` など）を
+使うようになった場合の保険になる。
 
-今回の用途（マーカーのロスト検出）では問題ないが、
-精密な時刻同期が必要なシステム（センサーフュージョンなど）では
-カメラの時刻源を ROS クロックに統一する（`chrony` 等で同期する）ほうがより正確。
+```cpp
+// 変更前
+ts.header.stamp = msg->header.stamp;
+
+// 変更後
+ts.header.stamp = this->now();   // ROS クロックで統一
+```
 
 ---
 
 ## 教訓
 
-1. **`this->now()` と `msg->header.stamp` は同じ時刻源ではない場合がある。**
-   USB カメラなどの外部デバイスは独自のクロック（V4L2、PTP など）を持つ。
+### 1. tf2::TimePointZero はキャッシュ期限を無視する
 
-2. **時刻差の比較をするなら、同一時刻源同士で行う。**
-   staleness チェックのように「現在時刻 − TF タイムスタンプ」を計算するとき、
-   TF に埋め込むタイムスタンプは `this->now()` で揃えるか、
-   または `ros__clock` パラメータでカメラの時刻源を統一する。
+`TimePointZero`（最新値要求）は TF2 の cache_time（デフォルト 10 秒）に関係なく
+バッファ内の最後の値を返す。TF の broadcast が止まっても例外にならず、
+古い値がそのまま使われ続ける。→ **Bug F の根本メカニズム**
 
-3. **ログの「差が増え続ける」は時刻が止まっているサインではない。**
-   差が一定なら「固定オフセット」（時刻源の違い）、
-   差が増え続けるなら「一方の時計が止まっている」（TF が更新されていない）。
-   症状を切り分けてデバッグする。
+### 2. 「差が 1 s/s で増加する」= TF が更新されていない
+
+staleness の差が 1 秒ごとに 1 秒増えるのは、
+`this->now()` は進むが `tf_stamp` が固定（TF が更新されていない）ためである。
+
+- 差が一定: 時刻のオフセットが固定（時刻源の違いなど）
+- 差が 1 s/s で増加: TF が更新されていない（broadcast 停止）
+
+### 3. 時刻源の種類と差の大きさ
+
+```
+CLOCK_MONOTONIC（OS 起動後の相対時刻）≈ 数百秒〜数万秒
+CLOCK_REALTIME（Unix エポック基準）   ≈ 17 億秒（2025年現在）
+差                                   ≈ 17 億秒
+```
+
+ログに出る差が小さい（数百秒程度）なら、両者は同じエポックを使っており、
+TF の更新停止が原因である可能性が高い。

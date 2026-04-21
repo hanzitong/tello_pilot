@@ -31,8 +31,9 @@ public:
         tf_buffer_   = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
+        // KeepLast(N): 履歴ポリシー。キューに最新 N 件のみ保持し、超過分は破棄する。
         joy_sub_ = this->create_subscription<sensor_msgs::msg::Joy>(
-            "joy", 10,
+            "joy", rclcpp::SensorDataQoS(rclcpp::KeepLast(1)),
             std::bind(&AutoLander::joy_callback, this, std::placeholders::_1)
         );
 

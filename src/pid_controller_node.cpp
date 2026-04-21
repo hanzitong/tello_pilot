@@ -32,7 +32,7 @@ class PidVelPublisher : public rclcpp::Node
     pid_y_{1.0, 0., 0.},
     last_time_(this->now())
     {
-      publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("pid_vel", 10);
+      publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("pid_vel", rclcpp::QoS(1));
       timer_ = this->create_wall_timer(
         100ms, std::bind(&PidVelPublisher::timer_callback, this)
       );
