@@ -23,24 +23,24 @@ include_directories(include)
 include_directories(srv)
 
 
-add_executable(ar_detector_node
-  src/ar_detector_node.cpp
-)
-ament_target_dependencies(ar_detector_node
-  rclcpp
-  OpenCV
-  cv_bridge
-  sensor_msgs
-  geometry_msgs
-  visualization_msgs
-  image_transport
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
-)
-install(TARGETS ar_detector_node
-  DESTINATION lib/${PROJECT_NAME}
-)
+# add_executable(ar_detector_node
+#   src/ar_detector_node.cpp
+# )
+# ament_target_dependencies(ar_detector_node
+#   rclcpp
+#   OpenCV
+#   cv_bridge
+#   sensor_msgs
+#   geometry_msgs
+#   visualization_msgs
+#   image_transport
+#   tf2
+#   tf2_ros
+#   tf2_geometry_msgs
+# )
+# install(TARGETS ar_detector_node
+#   DESTINATION lib/${PROJECT_NAME}
+# )
 
 
 add_executable(ar_detector_node_2

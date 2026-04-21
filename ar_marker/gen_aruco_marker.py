@@ -12,6 +12,10 @@ DICT_4X4_50 の ID 23 を PNG で出力する。
 import cv2
 
 MARKER_ID   = 23
+MARKER_ID   = 9
+MARKER_ID   = 20
+MARKER_ID   = 26
+MARKER_ID   = 21
 MARKER_SIZE = 400  # 出力画像サイズ [px]
 OUTPUT_FILE = "aruco_mark_23.png"
 
