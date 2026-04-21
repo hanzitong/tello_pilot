@@ -34,7 +34,7 @@ CLOCK_REALTIME  ≈ 1,776,740,400 s
 
 ### 本当の原因: TF が 165 秒間 broadcast されていない
 
-`ar_detector_node_2` は `/camera_info` を受信するまで
+`ar_single_detector_node` は `/camera_info` を受信するまで
 `camera_matrix_ready_ = false` のまま `imageCallback` の先頭で `return` する。
 
 ```cpp
@@ -54,7 +54,7 @@ if (!camera_matrix_ready_) {
 **キャッシュの有効期限（デフォルト 10 秒）に関わらず例外を投げない。**
 
 ```
-ar_detector_node_2:  TF broadcast 停止（camera_info 未受信）
+ar_single_detector_node:  TF broadcast 停止（camera_info 未受信）
                          ↓
 TF2 バッファ:  最後に受け取った TF を保持し続ける（期限に関係なく）
                          ↓
@@ -75,7 +75,7 @@ usb_cam
   └─ 画像を publish（/camera/image_raw）
   └─ カメラ情報を publish（/camera_info または別トピック？）
 
-ar_detector_node_2
+ar_single_detector_node
   └─ /camera_info 未受信 → camera_matrix_ready_ = false
   └─ imageCallback で即 return → TF broadcast なし
 
@@ -91,7 +91,7 @@ pid_controller_node
 
 ### 根本原因: /camera_info の受信確認
 
-`ar_detector_node_2` が `/camera_info` を受信しているか確認する。
+`ar_single_detector_node` が `/camera_info` を受信しているか確認する。
 
 ```bash
 ros2 topic list | grep camera_info
@@ -103,7 +103,7 @@ publish している場合は launch ファイルに remapping を追加する�
 
 ### 副次的修正: TF スタンプを this->now() に統一
 
-`ar_detector_node_2.cpp` の TF スタンプを `msg->header.stamp` から `this->now()` に変更する。
+`ar_single_detector_node.cpp` の TF スタンプを `msg->header.stamp` から `this->now()` に変更する。
 将来カメラドライバが異なる時刻源（V4L2 の `CLOCK_MONOTONIC` など）を
 使うようになった場合の保険になる。
 

@@ -38,7 +38,7 @@ rc << "rc "
 
 ```
 camera_frame
-  └─(ar_detector_node_2, 毎フレーム)─► marker_23_frame  [tvec m, ArUco 生の姿勢]
+  └─(ar_single_detector_node, 毎フレーム)─► marker_23_frame  [tvec m, ArUco 生の姿勢]
       └─(static TF, Rx(π))─► drone_frame
 ```
 （矢印は TF 親子関係。子フレームの位置を親フレームの座標系で表現）

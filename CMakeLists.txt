@@ -43,10 +43,10 @@ include_directories(srv)
 # )
 
 
-add_executable(ar_detector_node_2
-  src/ar_detector_node_2.cpp
+add_executable(ar_single_detector_node
+  src/ar_single_detector_node.cpp
 )
-ament_target_dependencies(ar_detector_node_2
+ament_target_dependencies(ar_single_detector_node
   rclcpp
   OpenCV
   cv_bridge
@@ -57,7 +57,7 @@ ament_target_dependencies(ar_detector_node_2
   tf2_ros
   tf2_geometry_msgs
 )
-install(TARGETS ar_detector_node_2
+install(TARGETS ar_single_detector_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

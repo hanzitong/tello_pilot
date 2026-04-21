@@ -1,11 +1,10 @@
-// ar_detector_node_2.cpp
+// ar_single_detector_node.cpp
 //
-// ar_detector_node の改良版。
+// 単一 ARマーカー（ID=kMarkerId）を検出し、TF を broadcast するノード。
 //
-// 変更点（ar_detector_node との差分）:
+// 機能:
 //   1. /camera_info を購読して実際のカメラ行列・歪み係数を使用する
 //   2. marker_23_frame の translation に tvec [m] をそのまま登録する
-//      （ar_detector_node は pixel/100 の2D値を使っていた）
 //   3. marker_23_frame の rotation は ArUco の生の姿勢（R_x180 補正なし）
 //      drone_frame は launch で定義する静的 TF (marker_23_frame → drone_frame, Rx(π)) に委ねる
 //
@@ -27,10 +26,10 @@
 #include <geometry_msgs/msg/transform_stamped.hpp>
 
 
-class ArDetectorNode2 : public rclcpp::Node
+class ArSingleDetectorNode : public rclcpp::Node
 {
 public:
-    ArDetectorNode2() : Node("ar_detector_2")
+    ArSingleDetectorNode() : Node("ar_single_detector")
     {
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
 
@@ -39,13 +38,13 @@ public:
         image_sub_ = create_subscription<sensor_msgs::msg::Image>(
             "/cam_image_raw",
             rclcpp::SensorDataQoS(rclcpp::KeepLast(1)),
-            std::bind(&ArDetectorNode2::imageCallback, this, std::placeholders::_1)
+            std::bind(&ArSingleDetectorNode::imageCallback, this, std::placeholders::_1)
         );
 
         camera_info_sub_ = create_subscription<sensor_msgs::msg::CameraInfo>(
             "/camera_info",
             rclcpp::SensorDataQoS(rclcpp::KeepLast(1)),
-            std::bind(&ArDetectorNode2::cameraInfoCallback, this, std::placeholders::_1)
+            std::bind(&ArSingleDetectorNode::cameraInfoCallback, this, std::placeholders::_1)
         );
 
         image_pub_ = create_publisher<sensor_msgs::msg::Image>(
@@ -188,7 +187,7 @@ private:
 int main(int argc, char** argv)
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<ArDetectorNode2>());
+    rclcpp::spin(std::make_shared<ArSingleDetectorNode>());
     rclcpp::shutdown();
     return 0;
 }

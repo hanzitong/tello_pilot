@@ -102,8 +102,8 @@ def generate_launch_description():
         ),
         Node(
             package='tello_pilot',
-            executable='ar_detector_node_2',
-            name='ar_detector_node_2',
+            executable='ar_single_detector_node',
+            name='ar_single_detector_node',
             output='screen',
             remappings=[
                 ('/cam_image_raw', '/camera/image_raw')
