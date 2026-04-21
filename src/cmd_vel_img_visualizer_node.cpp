@@ -1,18 +1,18 @@
-// cmd_vel_visualizer_node.cpp
+// cmd_vel_img_visualizer_node.cpp
 //
 // /pid_vel と /cmd_vel (Twist) の内容を /camera/image_raw にオーバーレイして
 // /image_cmd_vel として publish するデバッグノード。
 //
-//   /pid_vel: PID が計算した速度指令（黄色矢印）— ジョイスティック不要で常に表示
+//   /pid_vel: PID が計算した速度指令（黄色矢印）
 //   /cmd_vel: cmd_multiplexer が実際にドローンへ送る速度指令（緑矢印）
-//             ジョイスティック未接続 or RBボタン未押下 → 常に 0
 //
-// 矢印の始点: drone_frame を camera_frame に投影した画像座標
-//             TF または /camera_info が未取得の場合は画像中心にフォールバック
+// 矢印の始点: drone_frame を camera_frame に透視投影した画像座標
+//             camera_info または TF が未取得の場合は矢印・白丸を描画しない（フォールバックなし）
 //
-// 矢印の方向・長さ: linear.x/y [drone_frame] をピクセルにスケーリング
-//   drone X(前後) ≈ 画像 X 方向（右）、drone Y(左右) ≈ 画像 Y 方向（下）
-//   ※ yaw=0・水平飛行時のみ正確な対応。yaw が変わると画像軸との対応がずれる。
+// 矢印の方向・長さ:
+//   cmd_vel / pid_vel は drone_frame で表現されているため、
+//   描画前に drone_frame → camera_frame へ回転変換する。
+//   これにより drone の yaw によらず、矢印が画像上の正しい移動方向を示す。
 
 #include <memory>
 #include <string>
@@ -26,6 +26,8 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2/exceptions.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Vector3.h>
 
 
 class CmdVelVisualizerNode : public rclcpp::Node
@@ -87,30 +89,6 @@ private:
         const int cx_img = img.cols / 2;
         const int cy_img = img.rows / 2;
 
-        // --- drone_frame の camera_frame への透視投影を矢印の始点にする ---
-        // px = fx * (tx / tz) + cx_calib
-        // py = fy * (ty / tz) + cy_calib
-        int origin_x = cx_img;
-        int origin_y = cy_img;
-        bool drone_visible = false;
-
-        if (camera_info_ready_) {
-            try {
-                const auto t = tf_buffer_->lookupTransform(
-                    "camera_frame", "drone_frame", tf2::TimePointZero);
-                const double tx = t.transform.translation.x;
-                const double ty = t.transform.translation.y;
-                const double tz = t.transform.translation.z;
-                if (tz > 1e-6) {
-                    origin_x = static_cast<int>(fx_ * tx / tz + cx_);
-                    origin_y = static_cast<int>(fy_ * ty / tz + cy_);
-                    drone_visible = true;
-                }
-            } catch (const tf2::TransformException &) {
-                // TF 未取得: 画像中心にフォールバック
-            }
-        }
-
         const double cvx = last_cmd_vel_.linear.x;
         const double cvy = last_cmd_vel_.linear.y;
         const double cvz = last_cmd_vel_.linear.z;
@@ -122,29 +100,64 @@ private:
         cv::line(img, {cx_img - 10, cy_img}, {cx_img + 10, cy_img}, {0, 0, 255}, 2);
         cv::line(img, {cx_img, cy_img - 10}, {cx_img, cy_img + 10}, {0, 0, 255}, 2);
 
-        // --- drone_frame 投影点マーカー（白丸）: 矢印の始点 ---
-        cv::circle(img, cv::Point(origin_x, origin_y), 5,
-            drone_visible ? cv::Scalar(255, 255, 255) : cv::Scalar(100, 100, 100), -1);
+        // --- drone_frame の camera_frame への透視投影を矢印の始点にする ---
+        // px = fx * (tx / tz) + cx_calib
+        // py = fy * (ty / tz) + cy_calib
+        // camera_info または TF が未取得の場合は矢印・白丸を描かない（フォールバックなし）
+        if (camera_info_ready_) {
+            try {
+                const auto t = tf_buffer_->lookupTransform(
+                    "camera_frame", "drone_frame", tf2::TimePointZero);
+                const double tx = t.transform.translation.x;
+                const double ty = t.transform.translation.y;
+                const double tz = t.transform.translation.z;
 
-        // --- /pid_vel 矢印（黄色）: PID が計算した速度指令 ---
-        cv::arrowedLine(
-            img,
-            cv::Point(origin_x, origin_y),
-            cv::Point(origin_x + static_cast<int>(pvx * kVelScale),
-                      origin_y + static_cast<int>(pvy * kVelScale)),
-            cv::Scalar(0, 220, 220), 2, cv::LINE_8, 0, 0.25
-        );
+                if (tz > 1e-6) {
+                    const int origin_x = static_cast<int>(fx_ * tx / tz + cx_);
+                    const int origin_y = static_cast<int>(fy_ * ty / tz + cy_);
 
-        // --- /cmd_vel 矢印（緑）: ドローンへ実際に送る速度指令 ---
-        cv::arrowedLine(
-            img,
-            cv::Point(origin_x, origin_y),
-            cv::Point(origin_x + static_cast<int>(cvx * kVelScale),
-                      origin_y + static_cast<int>(cvy * kVelScale)),
-            cv::Scalar(0, 220, 0), 3, cv::LINE_8, 0, 0.25
-        );
+                    // cmd_vel / pid_vel は drone_frame で表現されている。
+                    // 画像上に正しい方向で描画するため、drone_frame → camera_frame に回転変換する。
+                    // q_drone_to_cam (= t.transform.rotation) は drone_frame → camera_frame の回転。
+                    // quatRotate(q_drone_to_cam, v_drone) = R_drone_to_cam * v_drone = v_cam
+                    const tf2::Quaternion q_drone_to_cam(
+                        t.transform.rotation.x,
+                        t.transform.rotation.y,
+                        t.transform.rotation.z,
+                        t.transform.rotation.w
+                    );
+                    const tf2::Vector3 cmd_cam = tf2::quatRotate(
+                        q_drone_to_cam, tf2::Vector3(cvx, cvy, 0.0));
+                    const tf2::Vector3 pid_cam = tf2::quatRotate(
+                        q_drone_to_cam, tf2::Vector3(pvx, pvy, 0.0));
 
-        // --- テキスト: 速度値（左上） ---
+                    // --- drone_frame 投影点マーカー（白丸）: 矢印の始点 ---
+                    cv::circle(img, cv::Point(origin_x, origin_y), 5, cv::Scalar(255, 255, 255), -1);
+
+                    // --- /pid_vel 矢印（黄色）: PID が計算した速度指令 ---
+                    cv::arrowedLine(
+                        img,
+                        cv::Point(origin_x, origin_y),
+                        cv::Point(origin_x + static_cast<int>(pid_cam.x() * kVelScale),
+                                  origin_y + static_cast<int>(pid_cam.y() * kVelScale)),
+                        cv::Scalar(0, 220, 220), 2, cv::LINE_8, 0, 0.25
+                    );
+
+                    // --- /cmd_vel 矢印（緑）: ドローンへ実際に送る速度指令 ---
+                    cv::arrowedLine(
+                        img,
+                        cv::Point(origin_x, origin_y),
+                        cv::Point(origin_x + static_cast<int>(cmd_cam.x() * kVelScale),
+                                  origin_y + static_cast<int>(cmd_cam.y() * kVelScale)),
+                        cv::Scalar(0, 220, 0), 3, cv::LINE_8, 0, 0.25
+                    );
+                }
+            } catch (const tf2::TransformException &) {
+                // TF 未取得: 矢印・白丸を描かない
+            }
+        }
+
+        // --- テキスト: 速度値（左上、drone_frame での値を表示） ---
         char buf[128];
         std::snprintf(buf, sizeof(buf), "[PID] Vx:%+.2f  Vy:%+.2f", pvx, pvy);
         cv::putText(img, buf, cv::Point(10, 28),
@@ -167,6 +180,7 @@ private:
         image_pub_->publish(*cv_bridge::CvImage(msg->header, "bgr8", img).toImageMsg());
     }
 
+
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr      image_sub_;
     rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr    cmd_vel_sub_;
@@ -181,7 +195,7 @@ private:
     double fx_{1.0}, fy_{1.0}, cx_{0.0}, cy_{0.0};
     bool   camera_info_ready_{false};
 
-    static constexpr int kVelScale = 150;
+    static constexpr int kVelScale = 450;
 };
 
 

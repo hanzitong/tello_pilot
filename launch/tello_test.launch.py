@@ -124,11 +124,11 @@ def generate_launch_description():
             executable='auto_lander_node',
             output='screen',
         ),
-        # Node(
-        #     package='tello_pilot',
-        #     executable='cmd_vel_img_visualizer_node',
-        #     output='screen',
-        # ),
+        Node(
+            package='tello_pilot',
+            executable='cmd_vel_img_visualizer_node',
+            output='screen',
+        ),
         Node(
             package='tello_pilot',
             executable='cmd_vel_arrow_visualizer_node',

@@ -75,27 +75,42 @@ class PidVelPublisher : public rclcpp::Node
                 return;
             }
 
-            // --- 誤差を drone_frame 座標系で表現する ---
-            // t.translation = camera_frame でのドローン位置 (= 誤差ベクトル、目標は原点)
+            // --- PID を camera_frame（固定フレーム）で計算し、出力を drone_frame に変換する ---
+            //
+            // 設計根拠:
+            //   誤差の積分・微分は固定フレーム (camera_frame) で行う必要がある。
+            //   drone_frame は yaw とともに回転するため、drone_frame で積分すると
+            //   yaw 変化のたびに積分軸が変わり、I・D 項が誤った方向に働く。
+            //   正しい手順:
+            //     1. camera_frame での位置誤差 (tx, ty) を PID に入力する
+            //     2. PID 出力（camera_frame 表現の速度）を drone_frame に回転してから publish する
+            //
+            // t.translation = camera_frame でのドローン位置 [m]（目標は原点）
             // t.rotation    = drone_frame → camera_frame への回転 (q_drone_to_cam)
-            // v_drone = q_drone_to_cam^{-1} * v_cam  で drone_frame 表現に変換する
+
+            const double tx = t.transform.translation.x;
+            const double ty = t.transform.translation.y;
+
+            // Step 1: camera_frame で PID 計算（単位: [m]、出力: 無次元速度指令）
+            // NOTE: ゲイン (kp=1.0) は実機テストで調整が必要
+            const double vel_x_cam = pid_x_.compute(tx, 0., dt);
+            const double vel_y_cam = pid_y_.compute(ty, 0., dt);
+
+            // Step 2: 速度指令を camera_frame から drone_frame に回転変換する
+            // q_drone_to_cam.inverse(): camera_frame → drone_frame への回転
             const tf2::Quaternion q_drone_to_cam(
                 t.transform.rotation.x,
                 t.transform.rotation.y,
                 t.transform.rotation.z,
                 t.transform.rotation.w
             );
-            const tf2::Vector3 v_cam(
-                t.transform.translation.x,
-                t.transform.translation.y,
-                0.0   // Z 誤差（高度）は今は使わない
+            const tf2::Vector3 vel_drone = tf2::quatRotate(
+                q_drone_to_cam.inverse(),
+                tf2::Vector3(vel_x_cam, vel_y_cam, 0.0)
             );
-            const tf2::Vector3 v_drone = tf2::quatRotate(q_drone_to_cam.inverse(), v_cam);
 
-            // --- PID 計算（単位: [m]、出力: 無次元速度指令 [-1, 1]）---
-            // NOTE: ゲイン (kp=1.0) は実機テストで調整が必要
-            pid_vel_msg.linear.x = pid_x_.compute(v_drone.x(), 0., dt);
-            pid_vel_msg.linear.y = pid_y_.compute(v_drone.y(), 0., dt);
+            pid_vel_msg.linear.x = vel_drone.x();
+            pid_vel_msg.linear.y = vel_drone.y();
 
         } catch (const tf2::TransformException & ex) {
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
