@@ -43,6 +43,25 @@ install(TARGETS ar_detector_node
 )
 
 
+add_executable(ar_detector_node_2
+  src/ar_detector_node_2.cpp
+)
+ament_target_dependencies(ar_detector_node_2
+  rclcpp
+  OpenCV
+  cv_bridge
+  sensor_msgs
+  geometry_msgs
+  image_transport
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+)
+install(TARGETS ar_detector_node_2
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+
 add_executable(cmd_multiplexer_node
   src/cmd_multiplexer_node.cpp
 )

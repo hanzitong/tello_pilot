@@ -2,6 +2,7 @@
 from launch import LaunchDescription
 from launch_ros.actions import Node
 import os
+import math
 from ament_index_python.packages import get_package_share_directory
 
 pkg_share = get_package_share_directory('tello_pilot')
@@ -60,20 +61,20 @@ def generate_launch_description():
         # respawn_delay=0.2,
     )
 
-    tf_node = Node(       # PC camera center frame [pixel] (1920x1080)
+    # drone_frame: marker_23_frame を X 軸回りに 180° 回転するとドローン座標系になる
+    # ARマーカーの Z 軸（カメラ方向）が反転し、ドローンの Z 軸（上方向）に対応する
+    drone_tf_node = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         arguments=[
-            # '--x', '9.6',   # [100 * pixel]
-            # '--y', '5.4',   # [100 * pixel]
-            '--x', str(usb_cam_pixels['width']/2/100),   # [100 * pixel]
-            '--y', str(usb_cam_pixels['height']/2/100),   # [100 * pixel]
+            '--x', '0',
+            '--y', '0',
             '--z', '0',
-            '--yaw', '0',
+            '--roll', str(math.pi),   # Rx(180°): marker Z (下向き) → drone Z (上向き)
             '--pitch', '0',
-            '--roll', '0',
-            '--frame-id', 'camera_frame',
-            '--child-frame-id', 'camera_center_frame'
+            '--yaw', '0',
+            '--frame-id', 'marker_23_frame',
+            '--child-frame-id', 'drone_frame'
         ]
     )
 
@@ -91,8 +92,8 @@ def generate_launch_description():
         ),
         Node(
             package='tello_pilot',
-            executable='ar_detector_node',
-            name='ar_detector_node',
+            executable='ar_detector_node_2',
+            name='ar_detector_node_2',
             output='screen',
             remappings=[
                 ('/cam_image_raw', '/camera/image_raw')
@@ -127,7 +128,7 @@ def generate_launch_description():
     )
 
 
-    return LaunchDescription([usb_cam] + [joy_node] + [tf_node] + tello_node_list + [rviz])
+    return LaunchDescription([usb_cam] + [joy_node] + [drone_tf_node] + tello_node_list + [rviz])
     # return LaunchDescription([joy_node])
 
 

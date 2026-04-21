@@ -102,11 +102,11 @@ CMakeLists.txt の `add_executable` 名から `_node` サフィックスを除�
 
 ---
 
-### Bug F — pid_controller / auto_lander: マーカーロスト後も古い TF で制御が継続する（致命的）
+### Bug F — pid_controller / auto_lander: マーカーロスト後も古い TF で制御が継続する（致命的）✅ 修正済み
 
 **ファイル:**
-- `src/tello_pilot/src/pid_controller_node.cpp` L68
-- `src/tello_pilot/src/auto_lander_node.cpp` L75
+- `src/tello_pilot/src/pid_controller_node.cpp`
+- `src/tello_pilot/src/auto_lander_node.cpp`
 
 **症状:**
 ARマーカーを一度検出してからロスト（視野外に出る・遮蔽など）すると、
@@ -114,45 +114,23 @@ ARマーカーを一度検出してからロスト（視野外に出る・遮蔽
 最悪の場合、`auto_lander` が誤って着陸コマンドを発行する。
 
 **原因:**
+`tf2::TimePointZero` は TF2 バッファ内の最新値をそのまま返す。
+デフォルトキャッシュ保持時間 10 秒以内は `TransformException` が投げられないため、
+古い TF 値がそのまま使われ続ける。
 
-`pid_controller_node.cpp`（L68）と `auto_lander_node.cpp`（L75）の両方で:
-```cpp
-t = tf_buffer_->lookupTransform(
-    "camera_center_frame", "marker_23_frame", tf2::TimePointZero);
-```
-
-`tf2::TimePointZero` は「TF2 バッファ内の最新値をそのまま返す」という意味。
-TF2 のキャッシュ保持時間はデフォルト **10秒** であり、マーカーをロストしても
-最後に検出した位置の TF が最大 10 秒間キャッシュに残り続ける。
-
-`TransformException` は TF が**一度も届いていない**か**キャッシュ期限切れ**の場合のみ投げられる。
-`tf2::TimePointZero` ではキャッシュ期限内は例外が投げられないため、
-catch 節は機能せず、古い TF 値がそのまま使われ続ける。
-
-```
-ar_detector: マーカーロスト → TF broadcast 停止
-TF2 バッファ: 最後の TF 値を最大 10 秒間保持  ← ここが問題
-pid_controller: lookupTransform が古い値を返す → PID 出力継続  ← 危険
-auto_lander: 古い収束位置でカウント継続 → 誤着陸コマンドの可能性  ← 危険
-```
-
-**修正方針:**
-
+**修正内容:**
 `lookupTransform` 成功後に TF の timestamp を確認し、
-一定時間以上古い場合はマーカーロストとして扱う。
+`kMaxStaleSec = 0.5` 秒以上古い場合はマーカーロストとして扱う。
 
 ```cpp
-// lookupTransform 後に staleness チェックを追加
-rclcpp::Time tf_stamp(t.header.stamp.sec, t.header.stamp.nanosec, RCL_ROS_TIME);
+const rclcpp::Time tf_stamp(t.header.stamp.sec, t.header.stamp.nanosec, RCL_ROS_TIME);
 if ((this->now() - tf_stamp).seconds() > kMaxStaleSec) {
-    // ロスト扱い: PID は 0 出力 / auto_lander はカウンタリセット
-    converge_count_ = 0;
+    // pid_controller: ゼロ出力 / auto_lander: converge_count_ リセット
     return;
 }
 ```
 
-`kMaxStaleSec` の推奨値: `0.5` 秒（カメラ 25fps の 12〜13 フレーム分）。
-カメラのフレームレートより十分長いが、制御の安全性には十分短い値。
+座標系整理（drone_frame 導入）と同時に適用した。
 
 ---
 

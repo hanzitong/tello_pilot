@@ -1,7 +1,8 @@
-// auto_lander.cpp
+// auto_lander_node.cpp
 //
 // 収束検出 → 自動着陸ノード
-// - 自動モード(RBボタン)のとき、マーカーが画像中心付近に一定時間とどまったら "land" を送信する
+// - 自動モード(RBボタン)のとき、ドローンが camera_frame 上の目標位置（XY 原点）
+//   付近に一定時間とどまったら "land" を送信する
 // - 着陸後は再トリガーしない
 
 #include <rclcpp/rclcpp.hpp>
@@ -14,10 +15,12 @@
 
 using namespace std::chrono_literals;
 
-// 収束とみなす誤差 [ピクセル/100]（= 100ピクセル以内）
-static constexpr double kConvergeThreshold = 1.0;
-// 着陸トリガーに必要な連続収束フレーム数（10フレーム × 100ms = 1秒）
-static constexpr int kConvergeFrames = 10;
+// 収束とみなす XY 誤差 [m]
+static constexpr double kConvergeThreshold = 0.10;
+// 着陸トリガーに必要な連続収束フレーム数（10 フレーム × 100ms = 1 秒）
+static constexpr int    kConvergeFrames    = 10;
+// マーカーロスト判定: TF がこの秒数より古ければロスト扱い（Bug F 対策）
+static constexpr double kMaxStaleSec       = 0.5;
 
 
 class AutoLander : public rclcpp::Node
@@ -63,25 +66,39 @@ private:
     {
         if (landed_) return;
 
-        // RBボタン(buttons[5])が押されていないときはカウンタリセット
-        if (!got_joy_ || last_joy_.buttons[5] != 1) {
+        // RB ボタン (buttons[5]) が押されていないときはカウンタリセット
+        const bool rb_pressed =
+            got_joy_ &&
+            static_cast<int>(last_joy_.buttons.size()) > 5 &&
+            last_joy_.buttons[5] == 1;
+
+        if (!rb_pressed) {
             converge_count_ = 0;
             return;
         }
 
-        // マーカーのカメラ中心からの誤差を取得
+        // drone_frame の camera_frame に対する位置を取得する
+        // = camera_frame でのドローン XY 変位 [m]
         geometry_msgs::msg::TransformStamped t;
         try {
             t = tf_buffer_->lookupTransform(
-                "camera_center_frame", "marker_23_frame", tf2::TimePointZero);
+                "camera_frame", "drone_frame", tf2::TimePointZero);
         } catch (const tf2::TransformException &) {
-            // マーカー未検出 → カウンタリセット
             converge_count_ = 0;
             return;
         }
 
-        double x = t.transform.translation.x;
-        double y = t.transform.translation.y;
+        // --- Bug F: staleness チェック ---
+        const rclcpp::Time tf_stamp(
+            t.header.stamp.sec, t.header.stamp.nanosec, RCL_ROS_TIME);
+        if ((this->now() - tf_stamp).seconds() > kMaxStaleSec) {
+            converge_count_ = 0;
+            return;
+        }
+
+        // XY 誤差のみで収束判定（Z = 高度は現時点では使わない）
+        const double x = t.transform.translation.x;
+        const double y = t.transform.translation.y;
 
         if (std::abs(x) < kConvergeThreshold && std::abs(y) < kConvergeThreshold) {
             converge_count_++;
@@ -90,15 +107,16 @@ private:
         }
 
         RCLCPP_DEBUG(this->get_logger(),
-            "converge_count=%d  x=%.2f y=%.2f", converge_count_, x, y);
+            "converge_count=%d  x=%.3f y=%.3f [m]", converge_count_, x, y);
 
         if (converge_count_ >= kConvergeFrames) {
             RCLCPP_INFO(this->get_logger(),
-                "Converged for %d frames. Sending land command.", kConvergeFrames);
+                "Converged for %d frames (x=%.3f y=%.3f [m]). Sending land command.",
+                kConvergeFrames, x, y);
             landed_ = true;
 
-            auto request  = std::make_shared<tello_msgs::srv::TelloAction::Request>();
-            request->cmd  = "land";
+            auto request = std::make_shared<tello_msgs::srv::TelloAction::Request>();
+            request->cmd = "land";
             land_client_->async_send_request(request);
         }
     }
