@@ -51,10 +51,10 @@ struct MarkerDef {
     double nx, ny;  // drone_frame X/Y 方向の符号（実距離は kMarkerDist / √2 を乗算）
 };
 static constexpr MarkerDef kMarkerDefs[] = {
-    { 9,  1,  1},   // +X+Y 方向
-    {20, -1,  1},   // -X+Y 方向
-    {21, -1, -1},   // -X-Y 方向
-    {26,  1, -1},   // +X-Y 方向
+    { 9,  1,  1},   // drone_frame +X+Y 方向
+    {20, -1,  1},   // drone_frame -X+Y 方向
+    {21, -1, -1},   // drone_frame -X-Y 方向
+    {26,  1, -1},   // drone_frame +X-Y 方向
 };
 
 
@@ -87,6 +87,22 @@ public:
             marker_offset_[def.id] = tf2::Vector3(def.nx * d, def.ny * d, 0.0);
         }
     }
+
+private:
+    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr      image_sub_;
+    rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
+    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr         image_pub_;
+    std::unique_ptr<tf2_ros::TransformBroadcaster>                tf_broadcaster_;
+
+    cv::Ptr<cv::aruco::Dictionary>         dictionary_;
+    cv::Ptr<cv::aruco::DetectorParameters> parameters_;
+
+    cv::Mat camera_matrix_;
+    cv::Mat dist_coeffs_;
+    bool    camera_matrix_ready_{false};
+
+    std::map<int, tf2::Vector3> marker_offset_;
+
 
 private:
     void cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg)
@@ -171,19 +187,19 @@ private:
             count++;
 
             // デバッグ用: 個別マーカーの TF broadcast（生の姿勢、Rx(π) なし）
-            {
-                geometry_msgs::msg::TransformStamped ts;
-                ts.header.stamp    = now;
-                ts.header.frame_id = "camera_frame";
-                ts.child_frame_id  = "marker_" + std::to_string(ids[i]) + "_frame";
-                ts.transform.translation.x = tvecs[i][0];
-                ts.transform.translation.y = tvecs[i][1];
-                ts.transform.translation.z = tvecs[i][2];
-                tf2::Quaternion q_raw;
-                R_cam_marker.getRotation(q_raw);
-                ts.transform.rotation = tf2::toMsg(q_raw);
-                tf_broadcaster_->sendTransform(ts);
-            }
+            // {
+            //     geometry_msgs::msg::TransformStamped ts;
+            //     ts.header.stamp    = now;
+            //     ts.header.frame_id = "camera_frame";
+            //     ts.child_frame_id  = "marker_" + std::to_string(ids[i]) + "_frame";
+            //     ts.transform.translation.x = tvecs[i][0];
+            //     ts.transform.translation.y = tvecs[i][1];
+            //     ts.transform.translation.z = tvecs[i][2];
+            //     tf2::Quaternion q_raw;
+            //     R_cam_marker.getRotation(q_raw);
+            //     ts.transform.rotation = tf2::toMsg(q_raw);
+            //     tf_broadcaster_->sendTransform(ts);
+            // }
 
             // 可視化: 3D 座標軸とバウンディングボックス
             cv::aruco::drawAxis(img, camera_matrix_, dist_coeffs_,
@@ -227,19 +243,6 @@ private:
         image_pub_->publish(*cv_bridge::CvImage(msg->header, "bgr8", img).toImageMsg());
     }
 
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr      image_sub_;
-    rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
-    rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr         image_pub_;
-    std::unique_ptr<tf2_ros::TransformBroadcaster>                tf_broadcaster_;
-
-    cv::Ptr<cv::aruco::Dictionary>         dictionary_;
-    cv::Ptr<cv::aruco::DetectorParameters> parameters_;
-
-    cv::Mat camera_matrix_;
-    cv::Mat dist_coeffs_;
-    bool    camera_matrix_ready_{false};
-
-    std::map<int, tf2::Vector3> marker_offset_;
 };
 
 
